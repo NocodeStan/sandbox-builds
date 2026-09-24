@@ -1,0 +1,15 @@
+{
+  "name": "akari-waitlist-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Akari Sauna waitlist automation for n8n: workflow source, builder, tests.",
+  "scripts": {
+    "build": "node build/build-workflow.mjs",
+    "test": "node --test test/*.test.mjs",
+    "e2e": "node test/e2e/run-e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

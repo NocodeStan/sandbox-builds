@@ -1,0 +1,114 @@
+{
+  "name": "Akari Waitlist · Error Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Error alert\nSet this workflow as the **Error workflow** in the main workflow's settings. Edit the recipients in **Build Alert Email**.",
+        "height": 180,
+        "width": 760,
+        "color": 7
+      },
+      "id": "996f4b05-9978-4e6d-ab9f-70f4589e5631",
+      "name": "Note: Error Alert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ef18e35d-7f7a-44e4-ad78-565263a4b4c8",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Edit these to match the main workflow's Config node ──\nconst CFG = {\n  fromEmail: 'waitlist@YOUR-DOMAIN.com',\n  fromName: 'Akari Waitlist Automation',\n  adminEmails: ['team@YOUR-DOMAIN.com'],\n  sandboxMode: false, // keep false so failures actually reach you\n};\n\nconst d = $input.first().json;\nconst ex = d.execution || {};\nconst err = ex.error || {};\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lines = [\n  ['Workflow', d.workflow?.name || '—'],\n  ['Failed node', ex.lastNodeExecuted || err.node?.name || '—'],\n  ['Error', err.message || '—'],\n  ['Mode', ex.mode || '—'],\n  ['Execution', ex.url || ex.id || '—'],\n];\nconst html = `<p><strong>The Akari waitlist automation hit an error.</strong></p>\n<table cellpadding=\"4\">${lines.map(([k, v]) => `<tr><td style=\"color:#666\">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>\n<p>Open the execution in n8n to see the input data, fix the cause, and retry it if needed.</p>`;\nconst text = lines.map(([k, v]) => `${k}: ${v}`).join('\\n');\n\nreturn [{\n  json: {\n    payload: {\n      personalizations: [{ to: CFG.adminEmails.map((email) => ({ email })) }],\n      from: { email: CFG.fromEmail, name: CFG.fromName },\n      subject: `[Waitlist automation] ${err.message ? err.message.slice(0, 80) : 'Execution failed'}`,\n      content: [{ type: 'text/plain', value: text }, { type: 'text/html', value: html }],\n      mail_settings: { sandbox_mode: { enable: !!CFG.sandboxMode } },\n    },\n  },\n}];\n"
+      },
+      "id": "8a7452cb-6909-462f-af76-b01185bfa38d",
+      "name": "Build Alert Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "f129f104-07b2-42cc-a3ad-6d216d3f562c",
+      "name": "Send Alert (SendGrid)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "akariSendGridKey",
+          "name": "SendGrid API Key (Akari)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Build Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Alert Email": {
+      "main": [
+        [
+          {
+            "node": "Send Alert (SendGrid)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
