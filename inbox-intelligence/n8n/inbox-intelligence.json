@@ -1,0 +1,1121 @@
+{
+  "name": "Inbox Intelligence v1",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Inbox Intelligence v1 · sort + weekly report\n**Sort** (weekdays, every 2h 07:00–19:00): new inbox threads are judged and labelled under **IQ/** — *1-Action* (you owe a reply), *2-Waiting On*, *3-My Commitments*, *Risk*, an area label (Client, New Business, …) and *Reading / Low Value* for bulk mail.\n**Report** (Mondays 06:30): re-reads the last 7 days of mail + 7 days back/ahead of calendar and emails you a one-page brief.\n\n**Division of labour:** code gathers facts (who wrote last, known clients, date phrases, attendee ↔ thread joins) and owns policy (thresholds, weights, labels). **TypeSafe** answers only the judgment calls, as typed probabilities. Nothing in the report is generated prose: every line is a real thread or event.\n\n**Before activating:** edit **Config**, attach the three credentials, run **Run Report Now** once with `applyLabels: false`.",
+        "height": 440,
+        "width": 1500,
+        "color": 4
+      },
+      "id": "98dc591a-588a-4974-a0d7-a4ef79592d31",
+      "name": "Note: Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Judge threads\nOne TypeSafe request per thread with all questions together (category, you-owe, waiting-on, your-commitment, risk, urgency, value, deadline pick). Bulk mail gets a cheaper 2-question set. A failed request does not stop the run: that thread is labelled *IQ/Review* and retried next time.",
+        "height": 240,
+        "width": 1260,
+        "color": 7
+      },
+      "id": "78f82bfc-0a1e-459f-a159-b5658a01d9d4",
+      "name": "Note: Judge",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Apply labels\nCreates any missing IQ labels (409 = already exists, ignored), then one modify call per thread: adds the labels it earns and removes IQ labels it no longer earns. `applyLabels: false` skips this lane entirely.",
+        "height": 240,
+        "width": 1240,
+        "color": 7
+      },
+      "id": "7e684db5-ae25-4b7e-a029-868dff90ad06",
+      "name": "Note: Labels",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Weekly report (report runs only)\nCalendar ±7 days → meetings with people are judged for type and prep need, joined to open threads by attendee email → one-page brief sent from your Gmail.",
+        "height": 240,
+        "width": 1240,
+        "color": 7
+      },
+      "id": "5fcfc2e5-a314-4faf-aa08-f62a1624c9c8",
+      "name": "Note: Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7-19/2 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "9c8b8056-b898-4928-a20f-a41b458721b5",
+      "name": "Every 2h (weekdays)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 6 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "bc081b82-20e3-49e9-a772-a53f042e2c64",
+      "name": "Monday 06:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9619fcb0-b441-4dbe-a54f-d23d906d511c",
+      "name": "Run Report Now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "42827087-0eb0-4cfc-aba3-3a660f925ca4",
+              "name": "route",
+              "value": "sort",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "edb92e3a-450e-4e8e-ae5e-24cd4653a86d",
+      "name": "Route: Sort",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bc6b576f-b85b-451d-a2ea-7ab932af8e4e",
+              "name": "route",
+              "value": "report",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "434eacdb-8d6f-44f4-a38c-ef4d086bff96",
+      "name": "Route: Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────\n//  INBOX INTELLIGENCE · CONFIG — the only node you should need to edit\n// ─────────────────────────────────────────────────────────────\nconst cfg = {\n  // Who the inbox belongs to (used in every judgment and to tell your messages from everyone else's)\n  owner: {\n    name: 'Stan',\n    role: 'Senior AI architect and advisor to C-suite and executive leadership',\n    focus: ['AI strategy', 'automation', 'agentic systems', 'digital transformation', 'executive advisory'],\n  },\n  ownerEmails: ['you@YOUR-DOMAIN.com'], // every address you send from (aliases too), lower-case\n  reportTo: ['you@YOUR-DOMAIN.com'], // weekly report recipients\n  timezone: 'Europe/London',\n  gmailAccountIndex: 0, // the /u/N/ in your Gmail URL, for links in the report\n\n  // Known relationships — exact lookups stay in code; the model is told the fact, not asked to guess it.\n  // Entries are domains (acme.com) or full addresses (jane@acme.com).\n  relationships: {\n    client: [],\n    prospect: [],\n    partner: [],\n    team: [],\n  },\n\n  // Safety switches\n  applyLabels: true, // false = judge and report only, never touch Gmail labels\n  archiveLowValueBulk: false, // true = low-value newsletters/promotions also leave the inbox (still searchable)\n  sortEnabled: true, // false = the 2-hourly sort does nothing (weekly report still runs)\n\n  // Scope\n  sortQuery: 'in:inbox newer_than:2d -in:chats', // what the 2-hourly sort looks at\n  reportQuery: 'newer_than:7d -in:chats -in:spam -in:trash -in:draft', // what the weekly report reads\n  maxThreadsPerRun: 400, // hard cap on threads judged per run (cost guardrail)\n  maxMessagesPerThread: 4, // latest N messages of each thread are sent for judgment\n  maxCharsPerMessage: 1200,\n  lookBackDays: 7,\n  lookAheadDays: 7,\n  eventsPerRequest: 12, // calendar events judged per TypeSafe request\n\n  // Decision policy — thresholds on TypeSafe probabilities / scores. Tune on your own mail.\n  thresholds: {\n    action: 0.6, // P(you owe a reply/decision/deliverable)\n    waiting: 0.6, // P(you are waiting on someone else)\n    commitment: 0.6, // P(you promised something not yet done)\n    risk: 0.5, // P(dissatisfaction / escalation / relationship risk)\n    reading: 1.8, // bulk relevance score (0–3) that earns \"Worth reading\"\n    minCategoryConfidence: 0.55, // below this the thread also gets the Review label\n    nudgeAfterDays: 3, // \"waiting on\" items older than this are flagged to chase\n  },\n  // Priority = weighted blend of judgments (0–100). Change weights without re-running any judgment.\n  weights: { urgency: 30, value: 30, action: 15, risk: 15, deadlineSoon: 10 },\n\n  // Labels (Gmail nests anything after \"/\")\n  labels: {\n    root: 'IQ',\n    action: 'IQ/1-Action',\n    waiting: 'IQ/2-Waiting On',\n    commitment: 'IQ/3-My Commitments',\n    risk: 'IQ/Risk',\n    review: 'IQ/Review',\n    reading: 'IQ/Reading',\n    lowValue: 'IQ/Low Value',\n    category: {\n      client_delivery: 'IQ/Client',\n      new_business: 'IQ/New Business',\n      partnerships_speaking: 'IQ/Partnerships',\n      finance_admin: 'IQ/Finance-Admin',\n      team_ops: 'IQ/Team-Ops',\n      personal: 'IQ/Personal',\n      automated_notification: 'IQ/Notifications',\n      other: 'IQ/Other',\n    },\n  },\n\n  // APIs\n  typesafeApi: 'https://api.typesafe.ai',\n  typesafeModel: 'jev-latest',\n  gmailApi: 'https://gmail.googleapis.com/gmail/v1/users/me',\n  calendarApi: 'https://www.googleapis.com/calendar/v3/calendars/primary',\n};\n\ncfg.allLabels = [\n  cfg.labels.root, cfg.labels.action, cfg.labels.waiting, cfg.labels.commitment, cfg.labels.risk,\n  cfg.labels.review, cfg.labels.reading, cfg.labels.lowValue, ...Object.values(cfg.labels.category),\n];\n\nreturn $input.all().map((item) => ({ json: { ...item.json, cfg } }));\n"
+      },
+      "id": "3ae19c5d-afe7-4367-a653-8b0d6ad28c78",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2f4b6f3b-5b4b-4e6f-a953-f18e9107924b",
+              "leftValue": "={{ $json.route === 'report' || $json.cfg.sortEnabled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "261e0475-568b-4426-adf9-aa9cee01dd4f",
+      "name": "Should Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/threads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.route === 'report' ? $json.cfg.reportQuery : $json.cfg.sortQuery }}"
+            },
+            {
+              "name": "maxResults",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "pageToken",
+                    "value": "={{ $response.body.nextPageToken }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.nextPageToken }}",
+              "limitPagesFetched": true,
+              "maxRequests": 5,
+              "requestInterval": 200
+            }
+          }
+        }
+      },
+      "id": "519406e6-5623-4257-a0c9-df9b4caa9297",
+      "name": "Gmail: List Threads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// One item per thread from the paginated threads.list responses (capped). Always emits at least one item\n// so an empty inbox still reaches the weekly report: { none: true } is routed past the judging steps.\nconst seen = new Set();\nconst ids = [];\nfor (const page of $input.all()) {\n  for (const t of page.json.threads || []) {\n    if (!seen.has(t.id)) {\n      seen.add(t.id);\n      ids.push(t.id);\n    }\n  }\n}\nconst kept = ids.slice(0, CFG.maxThreadsPerRun);\nif (!kept.length) return [{ json: { none: true } }];\nreturn kept.map((threadId) => ({ json: { threadId, truncated: ids.length > kept.length ? ids.length - kept.length : 0 } }));\n"
+      },
+      "id": "fcc7986e-4808-45c3-ade7-bf0f018672a8",
+      "name": "Split Threads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "aa6358fd-4b58-47fc-ab21-5baabf0588f3",
+              "leftValue": "={{ !$json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dbdfffe6-ad0a-4a0c-a708-105de6bd8a3d",
+      "name": "Has Threads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/threads/{{ $json.threadId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "format",
+              "value": "full"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "84034bd9-9faa-4805-a5b5-d10d4659fd46",
+      "name": "Gmail: Get Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// ── shared helpers: mail ─────────────────────────────\n// Gmail message → plain text, bulk-mail detection and date candidates.\n\nconst decodeB64 = (data) => Buffer.from(String(data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n\nfunction findPart(part, mime) {\n  if (!part) return null;\n  if (part.mimeType === mime && part.body && part.body.data) return part.body.data;\n  for (const p of part.parts || []) {\n    const hit = findPart(p, mime);\n    if (hit) return hit;\n  }\n  return null;\n}\n\nfunction htmlToText(html) {\n  return String(html || '')\n    .replace(/<(style|script|head)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/(p|div|li|tr|h\\d)>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\");\n}\n\n// Drops quoted history so each message contributes only what it adds.\nfunction stripQuoted(text) {\n  const cut = String(text).search(/^\\s*(On .{5,200}wrote:|-{2,}\\s*Original Message|_{5,}\\s*$|From: .+\\n(Sent|Date): )/im);\n  const kept = cut > 0 ? text.slice(0, cut) : text;\n  return kept.split('\\n').filter((l) => !/^\\s*>/.test(l)).join('\\n').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n}\n\nfunction messageText(msg) {\n  const plain = findPart(msg.payload, 'text/plain');\n  const html = plain ? null : findPart(msg.payload, 'text/html');\n  const raw = plain ? decodeB64(plain) : html ? htmlToText(decodeB64(html)) : msg.snippet || '';\n  const text = stripQuoted(raw) || String(msg.snippet || '');\n  return text.length > CFG.maxCharsPerMessage ? `${text.slice(0, CFG.maxCharsPerMessage)}…` : text;\n}\n\nconst BULK_CATEGORIES = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_FORUMS', 'CATEGORY_UPDATES'];\nconst BULK_SENDER = /^(no-?reply|do-?not-?reply|notifications?|notify|mailer-daemon|updates?|news(letter)?|marketing|info|hello|team)@/i;\n\n// Bulk = you never wrote in the thread AND it carries a mailing-list/marketing signal. Rule-based on purpose:\n// Gmail headers state this as fact, so no judgment is spent on it.\nfunction isBulkThread(messages, ownerWrote) {\n  if (ownerWrote) return false;\n  return messages.some((m) =>\n    header(m, 'List-Unsubscribe') ||\n    /^(bulk|list|junk)$/i.test(header(m, 'Precedence').trim()) ||\n    (m.labelIds || []).some((l) => BULK_CATEGORIES.includes(l)) ||\n    BULK_SENDER.test((parseAddressList(header(m, 'From'))[0] || {}).email || ''));\n}\n\n// ── Date candidates: code finds and resolves date phrases; the model only picks which (if any) is a deadline ──\nconst MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];\nconst WEEKDAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };\nconst addDays = (key, n) => {\n  const d = new Date(`${key}T00:00:00Z`);\n  d.setUTCDate(d.getUTCDate() + n);\n  return d.toISOString().slice(0, 10);\n};\nconst weekdayOf = (key) => new Date(`${key}T00:00:00Z`).getUTCDay();\nconst mondayOf = (key) => addDays(key, -((weekdayOf(key) + 6) % 7));\nconst validYmd = (y, m, d) => {\n  const dt = new Date(Date.UTC(y, m, d));\n  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m && dt.getUTCDate() === d ? dt.toISOString().slice(0, 10) : null;\n};\n\nfunction findDateCandidates(text, refDate) {\n  const ref = dayKey(refDate);\n  const found = [];\n  const add = (date, m) => {\n    if (!date) return;\n    const ctx = text.slice(Math.max(0, m.index - 90), m.index + m[0].length + 60).replace(/\\s+/g, ' ').trim();\n    found.push({ date, phrase: m[0].trim(), context: ctx });\n  };\n  const each = (re, fn) => {\n    for (const m of text.matchAll(re)) add(fn(m), m);\n  };\n  const nextWeekday = (wd, strictlyAfter = true) => {\n    let k = addDays(ref, strictlyAfter ? 1 : 0);\n    while (weekdayOf(k) !== wd) k = addDays(k, 1);\n    return k;\n  };\n\n  each(/\\b(today|tonight|end of (?:the )?day|EOD|COB)\\b/gi, () => ref);\n  each(/\\btomorrow\\b/gi, () => addDays(ref, 1));\n  each(/\\b(end of (?:the )?week|EOW)\\b/gi, () => nextWeekday(5, false));\n  each(/\\bnext week\\b/gi, () => nextWeekday(1));\n  each(/\\b(end of (?:the )?month|EOM)\\b/gi, () => {\n    const [y, mo] = ref.split('-').map(Number);\n    return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);\n  });\n  each(/\\b(?:(next|this)\\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thurs?|fri)\\b\\.?/gi, (m) => {\n    const wd = WEEKDAYS[m[2].slice(0, 3).toLowerCase()];\n    let k = nextWeekday(wd);\n    // \"next Friday\" said early in a week means the Friday after this one\n    if (/next/i.test(m[1] || '') && mondayOf(k) === mondayOf(ref)) k = addDays(k, 7);\n    return k;\n  });\n  const monthIdx = (s) => MONTHS.indexOf(s.slice(0, 3).toLowerCase());\n  const withYear = (y, mo, d) => {\n    if (y) return validYmd(Number(y), mo, d);\n    const refYear = Number(ref.slice(0, 4));\n    const k = validYmd(refYear, mo, d);\n    return k && k < addDays(ref, -30) ? validYmd(refYear + 1, mo, d) : k;\n  };\n  const MON = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';\n  each(new RegExp(`\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(?:of\\\\s+)?${MON}\\\\.?(?:,?\\\\s+(20\\\\d\\\\d))?\\\\b`, 'gi'), (m) => withYear(m[3], monthIdx(m[2]), Number(m[1])));\n  each(new RegExp(`\\\\b${MON}\\\\.?\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?(?:,?\\\\s+(20\\\\d\\\\d))?\\\\b`, 'gi'), (m) => withYear(m[3], monthIdx(m[1]), Number(m[2])));\n  each(/\\b(20\\d\\d)-(\\d\\d)-(\\d\\d)\\b/g, (m) => validYmd(Number(m[1]), Number(m[2]) - 1, Number(m[3])));\n\n  return found;\n}\n// ── end mail ─────────────────────────────────────────\n// Gmail thread → TypeSafe request. Code gathers the facts (who wrote last, known relationships, date\n// candidates); TypeSafe answers only the questions that need judgment. All questions go in ONE request per\n// thread: they are independent, run in parallel, and code later consumes the ones that apply.\nconst O = CFG.owner.name;\nconst store = $getWorkflowStaticData('global');\nstore.judged = store.judged || {};\nconst today = dayKey(NOW);\nconst out = [];\n\nfor (const item of $input.all()) {\n  const t = item.json;\n  const messages = (t.messages || [])\n    .filter((m) => !(m.labelIds || []).some((l) => ['DRAFT', 'SPAM', 'TRASH'].includes(l)))\n    .sort((a, b) => Number(a.internalDate) - Number(b.internalDate));\n  if (!messages.length) continue;\n\n  const last = messages[messages.length - 1];\n  // The 2-hourly sort skips threads with nothing new since they were last judged; the weekly report re-reads everything.\n  if (ROUTE === 'sort' && store.judged[t.id] && store.judged[t.id].m === last.id) continue;\n\n  const participants = new Map();\n  for (const m of messages) {\n    for (const h of ['From', 'To', 'Cc']) {\n      for (const a of parseAddressList(header(m, h))) if (!participants.has(a.email)) participants.set(a.email, a);\n    }\n  }\n  const fromOf = (m) => parseAddressList(header(m, 'From'))[0] || { name: 'unknown', email: '' };\n  const ownerWrote = messages.some((m) => isOwner(fromOf(m).email) || (m.labelIds || []).includes('SENT'));\n  const lastFromOwner = isOwner(fromOf(last).email) || (last.labelIds || []).includes('SENT');\n  const others = [...participants.values()].filter((p) => !isOwner(p.email));\n  const counterpart = others.find((p) => p.email === fromOf(last).email) || [...messages].reverse().map(fromOf).find((p) => !isOwner(p.email)) || others[0] || { name: '—', email: '' };\n  const subject = header(messages[0], 'Subject') || '(no subject)';\n  const lastAt = new Date(Number(last.internalDate));\n  const bulk = isBulkThread(messages, ownerWrote);\n  const recent = messages.slice(-CFG.maxMessagesPerThread);\n  const texts = recent.map((m) => ({ m, text: messageText(m) }));\n\n  const base = {\n    threadId: t.id,\n    lastMessageId: last.id,\n    subject,\n    counterpart,\n    participants: others.map((p) => p.email),\n    relationship: relationshipOf(counterpart.email),\n    lastMessageAt: lastAt.toISOString(),\n    firstMessageAt: new Date(Number(messages[0].internalDate)).toISOString(),\n    lastFromOwner,\n    ownerWrote,\n    messageCount: messages.length,\n    inInbox: messages.some((m) => (m.labelIds || []).includes('INBOX')),\n    unread: messages.some((m) => (m.labelIds || []).includes('UNREAD')),\n    kind: bulk ? 'bulk' : 'conversation',\n    candidates: [],\n  };\n\n  if (bulk) {\n    const text = texts[texts.length - 1].text;\n    out.push({ json: { ...base, request: {\n      model: CFG.typesafeModel,\n      state: {\n        reader: { name: O, role: CFG.owner.role, focus_areas: CFG.owner.focus },\n        email: { from: `${counterpart.name} <${counterpart.email}>`, subject, text },\n      },\n      questions: {\n        kind: {\n          type: 'choice',\n          instructions: 'What kind of automated or bulk email is `email`?',\n          criteria: {\n            newsletter_research: 'Editorial newsletter, research digest, analysis or industry news',\n            event_invitation: 'Invitation to a conference, webinar, meetup or other event',\n            marketing_promo: 'Product marketing, promotion, sale or sales outreach sent in bulk',\n            product_notification: 'Automated notice from a tool or service: activity, alerts, reminders, digests of app activity',\n            billing_receipt: 'Invoice, receipt, payment, subscription or billing notice',\n            security_account: 'Security alert, sign-in notice, password or account change',\n            other: 'None of the above',\n          },\n        },\n        relevance: {\n          type: 'score',\n          instructions: `How useful is \\`email\\` to \\`reader\\`, given their role and \\`reader.focus_areas\\`?`,\n          criteria: [\n            'No use: unrelated to their work or interests, or pure promotion',\n            'Marginal: loosely related; safe to skip',\n            'Useful: substantive content on one of their focus areas worth a skim this week',\n            'High value: insight, data, opportunity or event directly relevant to their advisory work that they would regret missing',\n          ],\n        },\n      },\n    } } });\n    continue;\n  }\n\n  // Deadline candidates: phrases found and resolved to dates by code, limited to the next 60 days.\n  const seenDates = new Set();\n  const candidates = [];\n  for (const { m, text } of texts) {\n    for (const c of findDateCandidates(text, new Date(Number(m.internalDate)))) {\n      if (c.date < today || c.date > addDays(today, 60) || seenDates.has(c.date)) continue;\n      seenDates.add(c.date);\n      candidates.push({ key: `d${candidates.length + 1}`, ...c, from: isOwner(fromOf(m).email) ? O : fromOf(m).name });\n    }\n  }\n  candidates.splice(6);\n\n  const state = {\n    owner: { name: O, role: CFG.owner.role },\n    today: fmtLongDay(NOW),\n    thread: {\n      subject,\n      counterpart: { name: counterpart.name, email: counterpart.email, known_relationship: base.relationship || 'unknown' },\n      other_participants: others.filter((p) => p.email !== counterpart.email).slice(0, 8).map((p) => `${p.name} <${p.email}>`),\n      message_count: messages.length,\n      last_message_from_owner: lastFromOwner,\n      days_since_last_message: Math.max(0, daysBetween(lastAt, NOW)),\n      recent_messages: texts.map(({ m, text }) => ({\n        from: isOwner(fromOf(m).email) ? `${O} (owner)` : `${fromOf(m).name} <${fromOf(m).email}>`,\n        sent: fmtDay(Number(m.internalDate)),\n        text,\n      })),\n    },\n  };\n\n  const questions = {\n    category: {\n      type: 'choice',\n      instructions: `Which area of ${O}'s work is \\`thread\\` mainly about? ${O} is the owner of this inbox.`,\n      criteria: {\n        client_delivery: `Work for an existing client: engagements, deliverables, workshops, feedback, scheduling client sessions`,\n        new_business: `Winning new work: enquiries, prospects, proposals, pricing, introductions to potential clients`,\n        partnerships_speaking: 'Partnerships, collaborations, speaking, media, podcasts, advisory boards, community',\n        finance_admin: 'Invoices, payments, contracts, legal, tax, insurance, accounts, suppliers',\n        team_ops: `Running ${O}'s own business: associates, contractors, tools, internal planning`,\n        personal: 'Personal or family matters unrelated to work',\n        automated_notification: 'Machine-generated message from a system or service, with no person expecting a reply',\n        other: 'None of the above',\n      },\n    },\n    needs_owner_action: {\n      type: 'noul',\n      instructions: `Considering the whole of \\`thread\\`, is someone waiting on ${O} (the owner) for a reply, decision, approval, information or deliverable that the thread does not show ${O} has already given?`,\n      criteria: {\n        true: `Yes: a question, request or proposal is addressed to ${O} and is still unanswered or undelivered`,\n        false: `No: nothing is outstanding from ${O}; the thread is informational, already answered, or closed with thanks`,\n      },\n    },\n    awaiting_others: {\n      type: 'noul',\n      instructions: `Considering the whole of \\`thread\\`, is ${O} (the owner) waiting on someone else for a reply, decision, document or action that has not yet arrived in the thread?`,\n    },\n    owner_commitment_open: {\n      type: 'noul',\n      instructions: `Did ${O} (the owner) personally commit in \\`thread\\` to do something (send, review, introduce, call, deliver) that later messages do not show as done?`,\n    },\n    relationship_risk: {\n      type: 'noul',\n      instructions: `Does \\`thread\\` show a risk to ${O}'s relationship with the other party: dissatisfaction, complaint, escalation, frustration at slow response, a dispute, or a threat to cancel?`,\n    },\n    urgency: {\n      type: 'score',\n      instructions: `How time-critical is \\`thread\\` for ${O} as of \\`today\\`?`,\n      criteria: [\n        'No time pressure: informational, or no action needed',\n        'Weeks: something to handle this month',\n        'This week: needs handling within the next few working days',\n        'Immediate: due within 48 hours, overdue, or explicitly marked urgent',\n      ],\n    },\n    strategic_value: {\n      type: 'score',\n      instructions: `How much does \\`thread\\` matter to ${O}'s business, given their role as ${CFG.owner.role}?`,\n      criteria: [\n        'None: no business relevance',\n        'Routine: ordinary operations or logistics',\n        'Significant: active client work, revenue, or a relationship that matters',\n        'Material: new revenue opportunity, senior executive stakeholder, or contractual, financial or reputational stakes',\n      ],\n    },\n  };\n\n  if (candidates.length) {\n    questions.deadline = {\n      type: 'choice',\n      instructions: `Each option is a date mentioned in \\`thread\\`, already resolved to a calendar date. Which one is a deadline or scheduled commitment that ${O} (the owner) must act on or attend? A date that is only background, in the past, or someone else's commitment is not.`,\n      criteria: {\n        ...Object.fromEntries(candidates.map((c) => [c.key, `\"${c.phrase}\" → ${fmtLongDay(`${c.date}T12:00:00Z`)} (written by ${c.from}; context: \"${c.context}\")`])),\n        none: `None of these is a deadline or commitment for ${O}`,\n      },\n    };\n  }\n\n  out.push({ json: { ...base, candidates, request: { model: CFG.typesafeModel, state, questions } } });\n}\n\n// The weekly report must still go out when nothing needs judging.\nif (!out.length && ROUTE === 'report') return [{ json: { none: true } }];\nreturn out;\n"
+      },
+      "id": "b568a144-7a78-4f80-a93e-007b8c9f2ad7",
+      "name": "Prepare Thread State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7f9e549a-2862-4df5-a54b-ec9d5a665bce",
+              "leftValue": "={{ !$json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a7e4d0c-452a-4604-ad0d-a697469e066b",
+      "name": "Anything to Judge?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.typesafeApi }}/v1/systemone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1000
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "34b42627-6fdb-44fd-a73e-4148f6b10862",
+      "name": "TypeSafe: Judge Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "iqTypeSafeKey",
+          "name": "TypeSafe API Key"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// TypeSafe answers + thread facts → policy decisions, priority and Gmail labels.\n// Policy lives here, not in the model: thresholds and weights come from Config and can change without\n// re-running any judgment. A failed or missing judgment never guesses; the thread goes to Review.\nconst T = CFG.thresholds;\nconst W = CFG.weights;\nconst L = CFG.labels;\nconst threads = $('Prepare Thread State').all();\nconst responses = $input.all();\nconst store = $getWorkflowStaticData('global');\nstore.judged = store.judged || {};\n\nconst out = threads.map((item, i) => {\n  const t = item.json;\n  const res = (responses[i] || {}).json || {};\n  const a = res.answers || null;\n  const usage = res.usage || { input_tokens: 0, output_tokens: 0 };\n  const r = { ...t, judged: !!a, error: a ? null : String((res.error && (res.error.message || res.error)) || 'no answer'), usage, labels: [], archive: false };\n  delete r.request;\n\n  if (!a) {\n    r.labels.push(L.review);\n    return { json: r };\n  }\n\n  if (t.kind === 'bulk') {\n    r.bulkKind = a.kind.choice;\n    r.relevance = a.relevance.score;\n    r.worthReading = a.relevance.score >= T.reading;\n    r.priority = Math.round((a.relevance.score / 3) * 40);\n    if (r.worthReading) r.labels.push(L.reading);\n    else if (['marketing_promo', 'product_notification'].includes(a.kind.choice) || a.relevance.score < 1) {\n      r.labels.push(L.lowValue);\n      r.archive = CFG.archiveLowValueBulk && t.inInbox;\n    }\n    r.labels.push(L.category.automated_notification);\n  } else {\n    r.category = a.category.choice;\n    r.categoryConfidence = a.category.confidence;\n    r.pAction = a.needs_owner_action.noul;\n    r.pWaiting = a.awaiting_others.noul;\n    r.pCommitment = a.owner_commitment_open.noul;\n    r.pRisk = a.relationship_risk.noul;\n    r.urgency = a.urgency.score;\n    r.value = a.strategic_value.score;\n\n    // Direction of the conversation is an observed fact: you can't owe a reply to your own last message,\n    // and you can't be waiting on others if they wrote last.\n    r.needsAction = r.pAction >= T.action && !t.lastFromOwner;\n    r.waitingOn = r.pWaiting >= T.waiting && t.lastFromOwner;\n    r.commitmentOpen = r.pCommitment >= T.commitment;\n    r.atRisk = r.pRisk >= T.risk;\n    r.daysWaiting = r.waitingOn ? Math.max(0, daysBetween(t.lastMessageAt, NOW)) : 0;\n    r.nudge = r.waitingOn && r.daysWaiting >= T.nudgeAfterDays;\n\n    const pick = a.deadline && a.deadline.choice !== 'none' ? t.candidates.find((c) => c.key === a.deadline.choice) : null;\n    r.deadline = pick ? { date: pick.date, phrase: pick.phrase, confidence: a.deadline.confidence } : null;\n    const dueSoon = r.deadline && daysBetween(NOW, `${r.deadline.date}T12:00:00Z`) <= 3;\n\n    r.priority = Math.round(\n      W.urgency * (r.urgency / 3) +\n      W.value * (r.value / 3) +\n      W.action * (r.needsAction || r.commitmentOpen ? 1 : 0) +\n      W.risk * r.pRisk +\n      W.deadlineSoon * (dueSoon ? 1 : 0),\n    );\n\n    r.labels.push(L.category[r.category] || L.category.other);\n    if (r.needsAction) r.labels.push(L.action);\n    if (r.waitingOn) r.labels.push(L.waiting);\n    if (r.commitmentOpen) r.labels.push(L.commitment);\n    if (r.atRisk) r.labels.push(L.risk);\n    if (r.categoryConfidence < T.minCategoryConfidence) r.labels.push(L.review);\n  }\n\n  store.judged[t.threadId] = { m: t.lastMessageId, at: NOW.toISOString() };\n  return { json: r };\n});\n\n// Forget threads not seen for 21 days so static data stays small.\nfor (const [id, v] of Object.entries(store.judged)) if (NOW - new Date(v.at) > 21 * DAY) delete store.judged[id];\n\nreturn out;\n"
+      },
+      "id": "b3b6c023-9626-4c55-ad7b-5052710a61ce",
+      "name": "Combine Judgments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// One item per IQ label; \"Create Label\" is idempotent (Gmail answers 409 for labels that already exist).\nif (!CFG.applyLabels) return [];\nreturn CFG.allLabels.map((name) => ({ json: { name } }));\n"
+      },
+      "id": "d3d70fee-5dc9-44a6-a642-b31ec2a544e2",
+      "name": "Label Names",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/labels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.name, labelListVisibility: 'labelShow', messageListVisibility: 'show' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "d6a53ca7-843a-4829-a5e0-30e8dda4682f",
+      "name": "Gmail: Create Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/labels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "id": "2a52d12e-ecd7-4bd6-a496-e5624bb6047a",
+      "name": "Gmail: List Labels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// Label names → Gmail label IDs, one modify request per thread. Every IQ label a thread no longer earns is\n// removed, so labels always reflect the latest judgment (e.g. Action clears once you've replied).\nconst byName = new Map(($input.first().json.labels || []).map((l) => [l.name, l.id]));\nconst iqIds = CFG.allLabels.filter((n) => n !== CFG.labels.root).map((n) => byName.get(n)).filter(Boolean);\nconst missing = CFG.allLabels.filter((n) => !byName.has(n));\nif (missing.length) throw new Error(`Gmail labels missing after create: ${missing.join(', ')}`);\n\nreturn $('Combine Judgments').all().map(({ json: t }) => {\n  const add = t.labels.map((n) => byName.get(n));\n  const remove = iqIds.filter((id) => !add.includes(id));\n  if (t.archive) remove.push('INBOX');\n  return { json: { threadId: t.threadId, body: { addLabelIds: add, removeLabelIds: remove } } };\n});\n"
+      },
+      "id": "a0fb1aa5-11e5-4dd6-a4b2-84311b920459",
+      "name": "Plan Thread Labels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/threads/{{ $json.threadId }}/modify",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "5c6d7a8b-9a37-407e-acb7-f9cd9fe1e359",
+      "name": "Gmail: Label Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4cd82b8d-594e-44ba-adba-4b6fc6bb17d9",
+              "leftValue": "={{ $('Config').first().json.route === 'report' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ee6968d-e151-4536-a248-67385a1ad74e",
+      "name": "Report Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.calendarApi }}/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeMin",
+              "value": "={{ new Date(Date.now() - $('Config').first().json.cfg.lookBackDays * 86400000).toISOString() }}"
+            },
+            {
+              "name": "timeMax",
+              "value": "={{ new Date(Date.now() + $('Config').first().json.cfg.lookAheadDays * 86400000).toISOString() }}"
+            },
+            {
+              "name": "singleEvents",
+              "value": "true"
+            },
+            {
+              "name": "orderBy",
+              "value": "startTime"
+            },
+            {
+              "name": "maxResults",
+              "value": "250"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1f9ca1f1-d47e-4067-a40c-410745e6a4f2",
+      "name": "Calendar: Get Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        460
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "iqCalendarOAuth",
+          "name": "Google Calendar (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// Calendar (last N days + next N days) → normalised events, joined to open email threads by attendee address,\n// then batched into TypeSafe requests. Each event gets its own questions, pointing at `events[i]` in shared state.\nconst O = CFG.owner.name;\nconst threads = $('Combine Judgments').isExecuted ? $('Combine Judgments').all().map((i) => i.json) : [];\nconst open = threads.filter((t) => t.needsAction || t.waitingOn || t.commitmentOpen || t.atRisk);\n\nconst events = [];\nfor (const e of $input.first().json.items || []) {\n  if (e.status === 'cancelled' || ['workingLocation', 'focusTime'].includes(e.eventType)) continue;\n  const me = (e.attendees || []).find((a) => a.self || isOwner(a.email));\n  if (me && me.responseStatus === 'declined') continue;\n  const allDay = !e.start.dateTime;\n  const start = e.start.dateTime || `${e.start.date}T00:00:00Z`;\n  const end = (e.end && (e.end.dateTime || `${e.end.date}T00:00:00Z`)) || start;\n  const attendees = (e.attendees || []).filter((a) => !a.resource && !a.self && !isOwner(a.email))\n    .map((a) => ({ name: a.displayName || a.email.split('@')[0], email: lower(a.email) }));\n  const emails = new Set(attendees.map((a) => a.email));\n  const related = open.filter((t) => t.participants.some((p) => emails.has(p)))\n    .sort((x, y) => y.priority - x.priority).slice(0, 3)\n    .map((t) => ({ threadId: t.threadId, subject: t.subject, needsAction: !!t.needsAction, atRisk: !!t.atRisk }));\n  events.push({\n    id: e.id,\n    title: e.summary || '(no title)',\n    start,\n    end,\n    allDay,\n    hours: allDay ? 0 : Math.max(0, (new Date(end) - new Date(start)) / HOUR),\n    isPast: new Date(end) <= NOW,\n    attendees,\n    relationship: attendees.map((a) => relationshipOf(a.email)).find(Boolean) || null,\n    outOfOffice: e.eventType === 'outOfOffice',\n    link: e.htmlLink || '',\n    description: String(e.description || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 400),\n    related,\n    // Solo blocks, all-day markers and out-of-office are classified by rule; only meetings with people are judged.\n    judge: !allDay && !e.eventType?.startsWith('outOf') && attendees.length > 0,\n  });\n}\n\nconst toJudge = events.filter((e) => e.judge);\nconst chunks = [];\nfor (let i = 0; i < toJudge.length; i += CFG.eventsPerRequest) chunks.push(toJudge.slice(i, i + CFG.eventsPerRequest));\nif (!chunks.length) return [{ json: { events, keys: {}, request: null } }];\n\nreturn chunks.map((chunk) => {\n  const questions = {};\n  const keys = {};\n  chunk.forEach((e, i) => {\n    keys[`e${i}`] = e.id;\n    questions[`e${i}_type`] = {\n      type: 'choice',\n      instructions: `What kind of meeting is \\`events[${i}]\\` for ${O}?`,\n      criteria: {\n        client: 'Working session, review or check-in with an existing client',\n        new_business: 'Sales conversation, discovery call, pitch or proposal meeting with a prospective client',\n        partner_network: 'Partner, collaborator, speaking, media, investor or networking meeting',\n        internal: `Internal: ${O}'s own associates, contractors or suppliers`,\n        personal: 'Personal appointment unrelated to work',\n        other: 'None of the above',\n      },\n    };\n    if (!e.isPast) {\n      questions[`e${i}_prep`] = {\n        type: 'score',\n        instructions: `How much preparation does ${O} need before \\`events[${i}]\\`? Consider its purpose, attendees and \\`events[${i}].open_email_threads\\`.`,\n        criteria: [\n          'None: routine or recurring; walk in as is',\n          'Light: skim notes or the latest thread beforehand',\n          'Moderate: review materials, decide positions, or resolve an open email thread first',\n          'Substantial: a deck, proposal, analysis or decision must be ready; senior or high-stakes audience',\n        ],\n      };\n    }\n  });\n  const state = {\n    owner: { name: O, role: CFG.owner.role },\n    today: fmtLongDay(NOW),\n    events: chunk.map((e) => ({\n      title: e.title,\n      when: `${fmtDay(e.start)} ${fmtTime(e.start)}–${fmtTime(e.end)}${e.isPast ? ' (past)' : ''}`,\n      attendees: e.attendees.slice(0, 12).map((a) => `${a.name} <${a.email}>`),\n      known_relationship: e.relationship || 'unknown',\n      description: e.description,\n      open_email_threads: e.related.map((r) => r.subject),\n    })),\n  };\n  return { json: { events, keys, request: { model: CFG.typesafeModel, state, questions } } };\n});\n"
+      },
+      "id": "e739bd66-01e4-4244-af74-ddd982e7ccbe",
+      "name": "Prepare Event Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        460
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ececd964-715b-4aa4-aaa6-d9b16956e648",
+              "leftValue": "={{ !!$json.request }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a613ffe2-2185-4ee1-a81b-3fe27ad86239",
+      "name": "Judge Events?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3360,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.typesafeApi }}/v1/systemone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1000
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "059d6629-7002-4bd0-aa71-09fe1ef7a8e5",
+      "name": "TypeSafe: Judge Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "iqTypeSafeKey",
+          "name": "TypeSafe API Key"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── shared helpers: core ─────────────────────────────\nconst CFG = $('Config').first().json.cfg;\nconst ROUTE = $('Config').first().json.route;\nconst NOW = new Date();\nconst HOUR = 3600000;\nconst DAY = 86400000;\n\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst lower = (s) => String(s || '').trim().toLowerCase();\nconst OWNER_EMAILS = CFG.ownerEmails.map(lower);\nconst isOwner = (email) => OWNER_EMAILS.includes(lower(email));\n\n// \"Jane Doe\" <jane@acme.com>, jane@acme.com, \"Doe, Jane\" <jane@acme.com>\nfunction parseAddressList(h) {\n  const out = [];\n  const re = /(?:\"?([^\"<,]*(?:,[^\"<,]*)?)\"?\\s*)?<([^>]+)>|([^\\s,<>\"]+@[^\\s,<>\"]+)/g;\n  let m;\n  while ((m = re.exec(String(h || '')))) {\n    const email = lower(m[2] || m[3]);\n    const name = String(m[1] || '').replace(/^[\\s,]+|[\\s,]+$/g, '').trim();\n    if (email.includes('@')) out.push({ name: name || email.split('@')[0], email });\n  }\n  return out;\n}\n\nconst header = (msg, name) =>\n  ((msg.payload || {}).headers || []).find((h) => lower(h.name) === lower(name))?.value || '';\n\nfunction relationshipOf(email) {\n  const e = lower(email);\n  const domain = e.split('@')[1] || '';\n  for (const [kind, list] of Object.entries(CFG.relationships || {})) {\n    if ((list || []).some((x) => lower(x) === e || lower(x) === domain)) return kind;\n  }\n  return null;\n}\n\n// Calendar dates in the owner's timezone\nconst dayKey = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: CFG.timezone }); // YYYY-MM-DD\nconst fmtDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'short', day: 'numeric', month: 'short' });\nconst fmtLongDay = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: CFG.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { timeZone: CFG.timezone, hour: '2-digit', minute: '2-digit' });\nconst daysBetween = (a, b) => Math.round((Date.parse(`${dayKey(b)}T00:00:00Z`) - Date.parse(`${dayKey(a)}T00:00:00Z`)) / DAY);\nconst gmailLink = (threadId) => `https://mail.google.com/mail/u/${CFG.gmailAccountIndex}/#all/${threadId}`;\n// ── end core ─────────────────────────────────────────\n// Assembles the weekly intelligence report from judgments. No generated prose: every line is a real thread or\n// event, selected and ranked by code, so nothing in the report can be invented.\nconst T = CFG.thresholds;\nconst threads = $('Combine Judgments').isExecuted ? $('Combine Judgments').all().map((i) => i.json) : [];\nconst prep = $('Prepare Event Requests').all();\nconst judged = $('TypeSafe: Judge Events').isExecuted ? $('TypeSafe: Judge Events').all() : [];\nconst events = (prep[0] && prep[0].json.events) || [];\n\n// Event judgments back onto events\nconst evJ = {};\nprep.forEach((p, i) => {\n  const a = judged[i] && judged[i].json && judged[i].json.answers;\n  if (!a) return;\n  for (const [k, id] of Object.entries(p.json.keys || {})) {\n    evJ[id] = { type: a[`${k}_type`] && a[`${k}_type`].choice, prep: a[`${k}_prep`] ? a[`${k}_prep`].score : null };\n  }\n});\nfor (const e of events) {\n  const j = evJ[e.id] || {};\n  e.type = e.outOfOffice ? 'out_of_office' : !e.judge ? (e.allDay ? 'all_day' : 'solo') : j.type || 'unjudged';\n  e.prep = j.prep ?? null;\n}\n\n// ── Selections ──\nconst conv = threads.filter((t) => t.kind === 'conversation' && t.judged);\nconst byPriority = (a, b) => b.priority - a.priority || new Date(b.lastMessageAt) - new Date(a.lastMessageAt);\nconst actions = conv.filter((t) => t.needsAction).sort(byPriority);\nconst commitments = conv.filter((t) => t.commitmentOpen).sort(byPriority);\nconst waiting = conv.filter((t) => t.waitingOn).sort((a, b) => b.daysWaiting - a.daysWaiting);\nconst risks = conv.filter((t) => t.atRisk).sort(byPriority);\nconst pipeline = conv.filter((t) => t.category === 'new_business').sort(byPriority);\nconst reading = threads.filter((t) => t.worthReading).sort((a, b) => b.relevance - a.relevance);\nconst failed = threads.filter((t) => !t.judged);\nconst review = threads.filter((t) => t.labels.includes(CFG.labels.review));\nconst today = dayKey(NOW);\nconst horizon = dayKey(NOW.getTime() + CFG.lookAheadDays * DAY);\nconst deadlines = conv.filter((t) => t.deadline && t.deadline.date >= today && t.deadline.date <= horizon)\n  .sort((a, b) => a.deadline.date.localeCompare(b.deadline.date));\nconst past = events.filter((e) => e.isPast);\nconst upcoming = events.filter((e) => !e.isPast).sort((a, b) => new Date(a.start) - new Date(b.start));\nconst prepList = upcoming.filter((e) => (e.prep ?? 0) >= 2 || e.related.some((r) => r.needsAction || r.atRisk));\n\nconst CAT_NAMES = {\n  client_delivery: 'Client delivery', new_business: 'New business', partnerships_speaking: 'Partnerships & speaking',\n  finance_admin: 'Finance & admin', team_ops: 'Team & ops', personal: 'Personal', automated_notification: 'Notifications', other: 'Other',\n};\nconst TYPE_NAMES = {\n  client: 'Client', new_business: 'New business', partner_network: 'Partners & network', internal: 'Internal', personal: 'Personal', other: 'Other',\n  solo: 'Solo / focus blocks', all_day: 'All-day', out_of_office: 'Out of office', unjudged: 'Unclassified',\n};\nconst count = (list, key) => list.reduce((m, x) => ((m[x[key]] = (m[x[key]] || 0) + 1), m), {});\nconst catCounts = Object.entries(count(conv, 'category')).sort((a, b) => b[1] - a[1]);\nconst hoursByType = Object.entries(past.filter((e) => !e.allDay).reduce((m, e) => ((m[e.type] = (m[e.type] || 0) + e.hours), m), {}))\n  .sort((a, b) => b[1] - a[1]);\nconst meetingHoursPast = past.filter((e) => !e.allDay && e.type !== 'solo').reduce((s, e) => s + e.hours, 0);\nconst meetingHoursAhead = upcoming.filter((e) => !e.allDay && e.type !== 'solo').reduce((s, e) => s + e.hours, 0);\nconst tokens = threads.reduce((s, t) => s + (t.usage?.input_tokens || 0) + (t.usage?.output_tokens || 0), 0)\n  + judged.reduce((s, j) => s + ((j.json.usage || {}).input_tokens || 0) + ((j.json.usage || {}).output_tokens || 0), 0);\n\n// Each thread is listed once in sections 1–5, in the first section it qualifies for (counts stay totals).\nconst listed = new Set();\nconst once = (list) => list.filter((t) => !listed.has(t.threadId) && listed.add(t.threadId));\nconst show = {};\nfor (const [k, list] of [['risks', risks], ['actions', actions], ['commitments', commitments], ['waiting', waiting], ['pipeline', pipeline]]) show[k] = once(list);\n\n// ── Rendering ──\nconst C = { ink: '#1a1a1a', mute: '#6b6b6b', line: '#e6e3dd', accent: '#1f4e79', warn: '#a33b20', soft: '#f6f4f0' };\nconst h1 = (s) => `<h2 style=\"font:600 15px/1.3 Georgia,serif;color:${C.ink};margin:28px 0 8px;padding-bottom:6px;border-bottom:1px solid ${C.line}\">${s}</h2>`;\nconst who = (t) => esc(t.counterpart.name || t.counterpart.email);\nconst ago = (iso) => {\n  const d = daysBetween(iso, NOW);\n  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`;\n};\nconst link = (t) => `<a href=\"${gmailLink(t.threadId)}\" style=\"color:${C.accent};text-decoration:none\">${esc(t.subject)}</a>`;\nconst tags = (t) => [\n  t.deadline ? `<span style=\"color:${C.warn}\">due ${esc(fmtDay(`${t.deadline.date}T12:00:00Z`))}</span>` : '',\n  t.atRisk ? `<span style=\"color:${C.warn}\">at risk</span>` : '',\n  t.relationship ? esc(t.relationship) : '',\n].filter(Boolean).join(' · ');\nconst row = (t, extra = '') =>\n  `<tr><td style=\"padding:7px 0;border-bottom:1px solid ${C.line};vertical-align:top\">${link(t)}<div style=\"color:${C.mute};font-size:12px\">${who(t)} · ${ago(t.lastMessageAt)}${tags(t) ? ` · ${tags(t)}` : ''}${extra}</div></td>`\n  + `<td style=\"padding:7px 0 7px 12px;border-bottom:1px solid ${C.line};text-align:right;vertical-align:top;color:${C.mute};font-size:12px;white-space:nowrap\">${t.priority}</td></tr>`;\nconst table = (list, extra) => `<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:14px;color:${C.ink}\">${list.map((t) => row(t, extra ? extra(t) : '')).join('')}</table>`;\nconst none = (s) => `<p style=\"color:${C.mute};font-size:13px;margin:4px 0\">${s}</p>`;\nconst more = (list, n) => (list.length > n ? `<p style=\"color:${C.mute};font-size:12px;margin:6px 0\">+ ${list.length - n} more under the <em>${esc(CFG.labels.root)}</em> labels in Gmail.</p>` : '');\nconst kpi = (n, label, warn) => `<td style=\"padding:10px 12px;background:${C.soft};text-align:center;width:16%\"><div style=\"font:600 22px Georgia,serif;color:${warn && n ? C.warn : C.ink}\">${n}</div><div style=\"font-size:11px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em\">${label}</div></td>`;\nconst fmtH = (h) => `${Math.round(h * 10) / 10}h`;\n\nconst days = [];\nfor (const e of upcoming) {\n  const k = dayKey(e.start);\n  if (!days.length || days[days.length - 1].k !== k) days.push({ k, list: [] });\n  days[days.length - 1].list.push(e);\n}\nconst eventLine = (e) => {\n  const flags = [\n    e.prep >= 2 ? `<span style=\"color:${C.warn}\">${e.prep >= 2.5 ? 'substantial prep' : 'prep'}</span>` : '',\n    ...e.related.map((r) => `open thread: <a href=\"${gmailLink(r.threadId)}\" style=\"color:${C.accent};text-decoration:none\">${esc(r.subject)}</a>${r.needsAction ? ' (you owe a reply)' : ''}`),\n  ].filter(Boolean).join(' · ');\n  return `<tr><td style=\"padding:5px 0;color:${C.mute};font-size:12px;width:92px;vertical-align:top\">${e.allDay ? 'all day' : `${fmtTime(e.start)}–${fmtTime(e.end)}`}</td>`\n    + `<td style=\"padding:5px 0;font-size:14px;vertical-align:top\">${esc(e.title)} <span style=\"color:${C.mute};font-size:12px\">${esc(TYPE_NAMES[e.type] || e.type)}${e.attendees.length ? ` · ${e.attendees.length} guest${e.attendees.length > 1 ? 's' : ''}` : ''}</span>${flags ? `<div style=\"font-size:12px;color:${C.mute}\">${flags}</div>` : ''}</td></tr>`;\n};\n\nconst weekFrom = fmtDay(NOW.getTime() - CFG.lookBackDays * DAY);\nconst weekTo = fmtDay(NOW.getTime() + CFG.lookAheadDays * DAY);\nconst subject = `Week ahead · ${fmtDay(NOW)} · ${actions.length} to act on${risks.length ? `, ${risks.length} at risk` : ''}${prepList.length ? `, ${prepList.length} meetings to prep` : ''}`;\n\nconst html = `<!doctype html><html><body style=\"margin:0;background:#fff\">\n<div style=\"max-width:680px;margin:0 auto;padding:24px 20px;font:14px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:${C.ink}\">\n<div style=\"font-size:12px;color:${C.mute};text-transform:uppercase;letter-spacing:.06em\">Inbox intelligence · ${esc(weekFrom)} → ${esc(weekTo)}</div>\n<h1 style=\"font:600 24px/1.25 Georgia,serif;margin:6px 0 16px\">${esc(CFG.owner.name)}, your week in one page</h1>\n<table width=\"100%\" cellspacing=\"4\" cellpadding=\"0\"><tr>\n${kpi(actions.length, 'You owe', true)}${kpi(commitments.length, 'You promised', true)}${kpi(waiting.length, 'Waiting on')}${kpi(risks.length, 'At risk', true)}${kpi(prepList.length, 'Meetings to prep', true)}${kpi(conv.length, 'Live threads')}\n</tr></table>\n\n${h1('1 · Relationship risk')}\n${show.risks.length ? table(show.risks.slice(0, 6)) : none('No dissatisfaction, escalation or churn signals detected.')}\n\n${h1('2 · Decide or reply first')}\n${show.actions.length ? table(show.actions.slice(0, 10)) + more(show.actions, 10) : none(actions.length ? 'Everything you owe is listed above.' : 'Nothing outstanding from you. Inbox is clear.')}\n\n${h1('3 · What you promised')}\n${show.commitments.length ? table(show.commitments.slice(0, 8)) + more(show.commitments, 8) : none(commitments.length ? 'Your open commitments are listed above.' : 'No open commitments found in last week’s threads.')}\n\n${h1('4 · Waiting on others')}\n${show.waiting.length ? table(show.waiting.slice(0, 8), (t) => ` · waiting ${t.daysWaiting}d${t.nudge ? ` · <strong style=\"color:${C.warn}\">chase</strong>` : ''}`) + more(show.waiting, 8) : none(waiting.length ? 'Listed above.' : 'Nobody owes you a reply.')}\n\n${h1('5 · Other pipeline activity')}\n${show.pipeline.length ? table(show.pipeline.slice(0, 8)) + more(show.pipeline, 8) : none(pipeline.length ? 'All new-business threads are listed above.' : 'No new-business threads this week.')}\n\n${h1('6 · Week ahead')}\n<p style=\"margin:4px 0 8px;font-size:13px;color:${C.mute}\">${upcoming.length} events · ${fmtH(meetingHoursAhead)} in meetings${deadlines.length ? ` · ${deadlines.length} email deadline${deadlines.length > 1 ? 's' : ''}` : ''}</p>\n${days.length ? days.map((d) => `<div style=\"margin-top:10px;font-weight:600;font-size:13px\">${esc(fmtDay(`${d.k}T12:00:00Z`))}</div><table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">${d.list.map(eventLine).join('')}</table>`).join('') : none('Calendar is empty for the next week.')}\n${deadlines.length ? `<div style=\"margin-top:14px;font-weight:600;font-size:13px\">Deadlines found in email</div>${table(deadlines.slice(0, 8), (t) => ` · “${esc(t.deadline.phrase)}”`)}` : ''}\n\n${h1('7 · Last week in numbers')}\n<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-size:13px\"><tr>\n<td style=\"vertical-align:top;width:50%;padding-right:12px\"><div style=\"font-weight:600;margin-bottom:4px\">Email by area (${conv.length} threads)</div>\n${catCounts.map(([k, n]) => `<div>${esc(CAT_NAMES[k] || k)} <span style=\"color:${C.mute}\">${n}</span></div>`).join('') || none('—')}\n<div style=\"color:${C.mute};margin-top:4px\">+ ${threads.filter((t) => t.kind === 'bulk').length} newsletters &amp; notifications</div></td>\n<td style=\"vertical-align:top;width:50%\"><div style=\"font-weight:600;margin-bottom:4px\">Time in meetings (${fmtH(meetingHoursPast)})</div>\n${hoursByType.filter(([k]) => k !== 'solo').map(([k, h]) => `<div>${esc(TYPE_NAMES[k] || k)} <span style=\"color:${C.mute}\">${fmtH(h)}</span></div>`).join('') || none('—')}</td>\n</tr></table>\n\n${h1('8 · Worth reading')}\n${reading.length ? `<ul style=\"padding-left:18px;margin:4px 0\">${reading.slice(0, 5).map((t) => `<li style=\"margin:3px 0\">${link(t)} <span style=\"color:${C.mute};font-size:12px\">${who(t)}</span></li>`).join('')}</ul>` : none('Nothing above the relevance bar this week.')}\n\n<p style=\"margin-top:28px;padding-top:10px;border-top:1px solid ${C.line};font-size:11px;color:${C.mute}\">\nRanked by priority (0–100: urgency, business value, open obligation, relationship risk, near deadline). Judgments by TypeSafe ${esc(CFG.typesafeModel)} · ${threads.length} threads, ${events.length} events, ${tokens.toLocaleString('en-GB')} tokens.\n${review.length ? ` ${review.length} thread${review.length > 1 ? 's' : ''} labelled <em>${esc(CFG.labels.review)}</em> for a quick human check.` : ''}\n${failed.length ? ` <strong style=\"color:${C.warn}\">${failed.length} thread${failed.length > 1 ? 's' : ''} could not be judged</strong> (service error) and will be retried next run.` : ''}\n</p></div></body></html>`;\n\nconst lines = (title, list, fmt = (t) => `- ${t.subject} (${t.counterpart.name}, ${ago(t.lastMessageAt)})`) => [`${title}`, ...(list.length ? list.slice(0, 10).map(fmt) : ['- none']), ''];\nconst text = [\n  `Inbox intelligence · ${weekFrom} → ${weekTo}`,\n  `You owe ${actions.length} · You promised ${commitments.length} · Waiting on ${waiting.length} · At risk ${risks.length} · Meetings to prep ${prepList.length}`,\n  '',\n  ...lines('1 · Relationship risk', show.risks),\n  ...lines('2 · Decide or reply first', show.actions),\n  ...lines('3 · What you promised', show.commitments),\n  ...lines('4 · Waiting on others', show.waiting, (t) => `- ${t.subject} (${t.counterpart.name}, waiting ${t.daysWaiting}d${t.nudge ? ', chase' : ''})`),\n  ...lines('5 · Other pipeline activity', show.pipeline),\n  ...lines('6 · Week ahead', upcoming, (e) => `- ${fmtDay(e.start)} ${e.allDay ? 'all day' : fmtTime(e.start)} ${e.title}${e.prep >= 2 ? ' [prep]' : ''}`),\n].join('\\n');\n\n// RFC 2822 message for gmail users.messages.send\nconst b64 = (s) => Buffer.from(s, 'utf8').toString('base64');\nconst boundary = `iq-${NOW.getTime()}`;\nconst mime = [\n  `To: ${CFG.reportTo.join(', ')}`,\n  `Subject: =?UTF-8?B?${b64(subject)}?=`,\n  'MIME-Version: 1.0',\n  `Content-Type: multipart/alternative; boundary=\"${boundary}\"`,\n  '',\n  `--${boundary}`,\n  'Content-Type: text/plain; charset=UTF-8',\n  'Content-Transfer-Encoding: base64',\n  '',\n  b64(text).replace(/.{76}/g, '$&\\r\\n'),\n  `--${boundary}`,\n  'Content-Type: text/html; charset=UTF-8',\n  'Content-Transfer-Encoding: base64',\n  '',\n  b64(html).replace(/.{76}/g, '$&\\r\\n'),\n  `--${boundary}--`,\n  '',\n].join('\\r\\n');\n\nreturn [{\n  json: {\n    raw: Buffer.from(mime, 'utf8').toString('base64url'),\n    subject,\n    html,\n    stats: {\n      threads: threads.length, conversations: conv.length, actions: actions.length, commitments: commitments.length,\n      waiting: waiting.length, risks: risks.length, pipeline: pipeline.length, reading: reading.length,\n      upcoming: upcoming.length, prep: prepList.length, deadlines: deadlines.length, failed: failed.length, review: review.length, tokens,\n    },\n  },\n}];\n"
+      },
+      "id": "10a71e09-5b1a-4a4b-ab61-8e0fbbb5effa",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        460
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.gmailApi }}/messages/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ raw: $json.raw }) }}",
+        "options": {}
+      },
+      "id": "a9597c9f-36a4-4990-af64-ed4a4c886a44",
+      "name": "Gmail: Send Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4080,
+        460
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Every 2h (weekdays)": {
+      "main": [
+        [
+          {
+            "node": "Route: Sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday 06:30": {
+      "main": [
+        [
+          {
+            "node": "Route: Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Report Now (manual)": {
+      "main": [
+        [
+          {
+            "node": "Route: Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Sort": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Report": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Should Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Run?": {
+      "main": [
+        [
+          {
+            "node": "Gmail: List Threads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Gmail: List Threads": {
+      "main": [
+        [
+          {
+            "node": "Split Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Threads": {
+      "main": [
+        [
+          {
+            "node": "Has Threads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Threads?": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Get Thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: Get Thread": {
+      "main": [
+        [
+          {
+            "node": "Prepare Thread State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Thread State": {
+      "main": [
+        [
+          {
+            "node": "Anything to Judge?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to Judge?": {
+      "main": [
+        [
+          {
+            "node": "TypeSafe: Judge Thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TypeSafe: Judge Thread": {
+      "main": [
+        [
+          {
+            "node": "Combine Judgments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Judgments": {
+      "main": [
+        [
+          {
+            "node": "Label Names",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Report Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Names": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Create Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: Create Label": {
+      "main": [
+        [
+          {
+            "node": "Gmail: List Labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: List Labels": {
+      "main": [
+        [
+          {
+            "node": "Plan Thread Labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Thread Labels": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Label Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Run?": {
+      "main": [
+        [
+          {
+            "node": "Calendar: Get Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Calendar: Get Events": {
+      "main": [
+        [
+          {
+            "node": "Prepare Event Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Event Requests": {
+      "main": [
+        [
+          {
+            "node": "Judge Events?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge Events?": {
+      "main": [
+        [
+          {
+            "node": "TypeSafe: Judge Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TypeSafe: Judge Events": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Send Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,16 @@
+{
+  "name": "inbox-intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Inbox sorting + weekly intelligence report for n8n (Gmail, Google Calendar, TypeSafe): workflow source, builder, tests.",
+  "scripts": {
+    "build": "node build/build-workflow.mjs",
+    "test": "node --test test/*.test.mjs",
+    "sample": "node test/sample-report.mjs",
+    "e2e": "node test/e2e/run-e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

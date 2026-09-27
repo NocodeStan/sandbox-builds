@@ -1,0 +1,108 @@
+{
+  "name": "Inbox Intelligence · Error Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Error alert\nSet this workflow as the **Error workflow** in the main workflow's settings. Edit the recipient in **Build Alert Email**.",
+        "height": 180,
+        "width": 760,
+        "color": 7
+      },
+      "id": "b63473f8-7f08-4362-a20f-d1abbf4bbbb0",
+      "name": "Note: Error Alert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0b096b7b-e8da-48e4-a75b-426928342c16",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Edit to match the main workflow's Config node ──\nconst CFG = {\n  alertTo: ['you@YOUR-DOMAIN.com'],\n};\n\nconst d = $input.first().json;\nconst ex = d.execution || {};\nconst err = ex.error || {};\nconst lines = [\n  ['Workflow', d.workflow?.name || '—'],\n  ['Failed node', ex.lastNodeExecuted || err.node?.name || '—'],\n  ['Error', err.message || '—'],\n  ['Mode', ex.mode || '—'],\n  ['Execution', ex.url || ex.id || '—'],\n];\nconst subject = `[Inbox intelligence] ${err.message ? err.message.slice(0, 80) : 'Execution failed'}`;\nconst body = `${lines.map(([k, v]) => `${k}: ${v}`).join('\\n')}\\n\\nOpen the execution in n8n to see the input data, fix the cause, and retry it if needed.\\n`;\nconst mime = [\n  `To: ${CFG.alertTo.join(', ')}`,\n  `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,\n  'MIME-Version: 1.0',\n  'Content-Type: text/plain; charset=UTF-8',\n  '',\n  body,\n].join('\\r\\n');\n\nreturn [{ json: { raw: Buffer.from(mime, 'utf8').toString('base64url') } }];\n"
+      },
+      "id": "291c7d88-f330-4234-a06c-f8064b1acf14",
+      "name": "Build Alert Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ raw: $json.raw }) }}",
+        "options": {}
+      },
+      "id": "ef580c7d-e2fa-4223-ad42-ee367ea2faa3",
+      "name": "Send Alert (Gmail)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iqGmailOAuth",
+          "name": "Gmail (Inbox Intelligence)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Build Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Alert Email": {
+      "main": [
+        [
+          {
+            "node": "Send Alert (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
