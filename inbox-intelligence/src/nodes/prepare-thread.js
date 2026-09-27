@@ -1,9 +1,12 @@
 // @include core
 // @include mail
+// @include-json rubric
+// @include rubric
 // Gmail thread → TypeSafe request. Code gathers the facts (who wrote last, known relationships, date
 // candidates); TypeSafe answers only the questions that need judgment. All questions go in ONE request per
 // thread: they are independent, run in parallel, and code later consumes the ones that apply.
 const O = CFG.owner.name;
+const vars = { owner: O, role: CFG.owner.role };
 const store = $getWorkflowStaticData('global');
 store.judged = store.judged || {};
 const today = dayKey(NOW);
@@ -63,31 +66,7 @@ for (const item of $input.all()) {
         reader: { name: O, role: CFG.owner.role, focus_areas: CFG.owner.focus },
         email: { from: `${counterpart.name} <${counterpart.email}>`, subject, text },
       },
-      questions: {
-        kind: {
-          type: 'choice',
-          instructions: 'What kind of automated or bulk email is `email`?',
-          criteria: {
-            newsletter_research: 'Editorial newsletter, research digest, analysis or industry news',
-            event_invitation: 'Invitation to a conference, webinar, meetup or other event',
-            marketing_promo: 'Product marketing, promotion, sale or sales outreach sent in bulk',
-            product_notification: 'Automated notice from a tool or service: activity, alerts, reminders, digests of app activity',
-            billing_receipt: 'Invoice, receipt, payment, subscription or billing notice',
-            security_account: 'Security alert, sign-in notice, password or account change',
-            other: 'None of the above',
-          },
-        },
-        relevance: {
-          type: 'score',
-          instructions: `How useful is \`email\` to \`reader\`, given their role and \`reader.focus_areas\`?`,
-          criteria: [
-            'No use: unrelated to their work or interests, or pure promotion',
-            'Marginal: loosely related; safe to skip',
-            'Useful: substantive content on one of their focus areas worth a skim this week',
-            'High value: insight, data, opportunity or event directly relevant to their advisory work that they would regret missing',
-          ],
-        },
-      },
+      questions: rubricQuestions('bulk', vars),
     } } });
     continue;
   }
@@ -122,72 +101,15 @@ for (const item of $input.all()) {
     },
   };
 
-  const questions = {
-    category: {
-      type: 'choice',
-      instructions: `Which area of ${O}'s work is \`thread\` mainly about? ${O} is the owner of this inbox.`,
-      criteria: {
-        client_delivery: `Work for an existing client: engagements, deliverables, workshops, feedback, scheduling client sessions`,
-        new_business: `Winning new work: enquiries, prospects, proposals, pricing, introductions to potential clients`,
-        partnerships_speaking: 'Partnerships, collaborations, speaking, media, podcasts, advisory boards, community',
-        finance_admin: 'Invoices, payments, contracts, legal, tax, insurance, accounts, suppliers',
-        team_ops: `Running ${O}'s own business: associates, contractors, tools, internal planning`,
-        personal: 'Personal or family matters unrelated to work',
-        automated_notification: 'Machine-generated message from a system or service, with no person expecting a reply',
-        other: 'None of the above',
-      },
-    },
-    needs_owner_action: {
-      type: 'noul',
-      instructions: `Considering the whole of \`thread\`, is someone waiting on ${O} (the owner) for a reply, decision, approval, information or deliverable that the thread does not show ${O} has already given?`,
-      criteria: {
-        true: `Yes: a question, request or proposal is addressed to ${O} and is still unanswered or undelivered`,
-        false: `No: nothing is outstanding from ${O}; the thread is informational, already answered, or closed with thanks`,
-      },
-    },
-    awaiting_others: {
-      type: 'noul',
-      instructions: `Considering the whole of \`thread\`, is ${O} (the owner) waiting on someone else for a reply, decision, document or action that has not yet arrived in the thread?`,
-    },
-    owner_commitment_open: {
-      type: 'noul',
-      instructions: `Did ${O} (the owner) personally commit in \`thread\` to do something (send, review, introduce, call, deliver) that later messages do not show as done?`,
-    },
-    relationship_risk: {
-      type: 'noul',
-      instructions: `Does \`thread\` show a risk to ${O}'s relationship with the other party: dissatisfaction, complaint, escalation, frustration at slow response, a dispute, or a threat to cancel?`,
-    },
-    urgency: {
-      type: 'score',
-      instructions: `How time-critical is \`thread\` for ${O} as of \`today\`?`,
-      criteria: [
-        'No time pressure: informational, or no action needed',
-        'Weeks: something to handle this month',
-        'This week: needs handling within the next few working days',
-        'Immediate: due within 48 hours, overdue, or explicitly marked urgent',
-      ],
-    },
-    strategic_value: {
-      type: 'score',
-      instructions: `How much does \`thread\` matter to ${O}'s business, given their role as ${CFG.owner.role}?`,
-      criteria: [
-        'None: no business relevance',
-        'Routine: ordinary operations or logistics',
-        'Significant: active client work, revenue, or a relationship that matters',
-        'Material: new revenue opportunity, senior executive stakeholder, or contractual, financial or reputational stakes',
-      ],
-    },
-  };
+  const questions = rubricQuestions('thread', vars, ['category', 'needs_owner_action', 'awaiting_others', 'owner_commitment_open', 'relationship_risk', 'urgency', 'strategic_value']);
 
   if (candidates.length) {
-    questions.deadline = {
-      type: 'choice',
-      instructions: `Each option is a date mentioned in \`thread\`, already resolved to a calendar date. Which one is a deadline or scheduled commitment that ${O} (the owner) must act on or attend? A date that is only background, in the past, or someone else's commitment is not.`,
-      criteria: {
-        ...Object.fromEntries(candidates.map((c) => [c.key, `"${c.phrase}" → ${fmtLongDay(`${c.date}T12:00:00Z`)} (written by ${c.from}; context: "${c.context}")`])),
-        none: `None of these is a deadline or commitment for ${O}`,
-      },
+    const { deadline } = rubricQuestions('thread', vars, ['deadline']);
+    deadline.criteria = {
+      ...Object.fromEntries(candidates.map((c) => [c.key, `"${c.phrase}" → ${fmtLongDay(`${c.date}T12:00:00Z`)} (written by ${c.from}; context: "${c.context}")`])),
+      ...deadline.criteria,
     };
+    questions.deadline = deadline;
   }
 
   out.push({ json: { ...base, candidates, request: { model: CFG.typesafeModel, state, questions } } });

@@ -1,4 +1,6 @@
 // @include core
+// @include-json rubric
+// @include rubric
 // Calendar (last N days + next N days) → normalised events, joined to open email threads by attendee address,
 // then batched into TypeSafe requests. Each event gets its own questions, pointing at `events[i]` in shared state.
 const O = CFG.owner.name;
@@ -48,30 +50,9 @@ return chunks.map((chunk) => {
   const keys = {};
   chunk.forEach((e, i) => {
     keys[`e${i}`] = e.id;
-    questions[`e${i}_type`] = {
-      type: 'choice',
-      instructions: `What kind of meeting is \`events[${i}]\` for ${O}?`,
-      criteria: {
-        client: 'Working session, review or check-in with an existing client',
-        new_business: 'Sales conversation, discovery call, pitch or proposal meeting with a prospective client',
-        partner_network: 'Partner, collaborator, speaking, media, investor or networking meeting',
-        internal: `Internal: ${O}'s own associates, contractors or suppliers`,
-        personal: 'Personal appointment unrelated to work',
-        other: 'None of the above',
-      },
-    };
-    if (!e.isPast) {
-      questions[`e${i}_prep`] = {
-        type: 'score',
-        instructions: `How much preparation does ${O} need before \`events[${i}]\`? Consider its purpose, attendees and \`events[${i}].open_email_threads\`.`,
-        criteria: [
-          'None: routine or recurring; walk in as is',
-          'Light: skim notes or the latest thread beforehand',
-          'Moderate: review materials, decide positions, or resolve an open email thread first',
-          'Substantial: a deck, proposal, analysis or decision must be ready; senior or high-stakes audience',
-        ],
-      };
-    }
+    const q = rubricQuestions('event', { owner: O, i });
+    questions[`e${i}_type`] = q.type;
+    if (!e.isPast) questions[`e${i}_prep`] = q.prep;
   });
   const state = {
     owner: { name: O, role: CFG.owner.role },

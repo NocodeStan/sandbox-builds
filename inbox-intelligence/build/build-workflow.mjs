@@ -13,7 +13,10 @@ export function loadCode(name) {
 }
 
 export function expandIncludes(src) {
-  return src.replace(/^\/\/ @include (\w+)\s*$/gm, (_, h) => {
+  return src.replace(/^\/\/ @include-json (\w+)\s*$/gm, (_, f) => {
+    const upper = f.toUpperCase();
+    return `// ── ${f}.json (edit the file, then npm run build) ──\nconst ${upper} = ${JSON.stringify(JSON.parse(read(`${f}.json`)))};`;
+  }).replace(/^\/\/ @include (\w+)\s*$/gm, (_, h) => {
     const body = read(`src/helpers/${h}.js`).trimEnd();
     return `// ── shared helpers: ${h} ─────────────────────────────\n${body}\n// ── end ${h} ─────────────────────────────────────────`;
   });

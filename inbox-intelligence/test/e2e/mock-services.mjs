@@ -1,7 +1,7 @@
 // Strict local stand-ins for Gmail, Google Calendar and TypeSafe, shaped like the real APIs.
 // Auth is enforced; every TypeSafe request is validated against the SDK contract before it is answered.
 import { createServer } from 'node:http';
-import { answerRequest } from '../typesafe-contract.mjs';
+import { answerRequest } from '../../../jev/contract.mjs';
 
 export const GOOGLE_TOKEN = 'ya29.e2e-google-token';
 export const TYPESAFE_KEY = 'ts-e2e-key';

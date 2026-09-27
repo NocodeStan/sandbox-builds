@@ -1,0 +1,16 @@
+---
+description: How to build a use case on TypeSafe Jev in this repo
+globs: ["**/rubric.json", "jev/**", "**/*.mjs", "**/*.js"]
+alwaysApply: false
+---
+Every use case here follows jev/README.md:
+
+- Code gathers **state** (facts); Jev answers **judgments** defined in `<use-case>/rubric.json`; code applies
+  **policy** (thresholds, weights) from config; output is selected and ranked from real items, never generated prose.
+- Never hard-code question text in code. Add or edit it in rubric.json and build requests with `jev/rubric.mjs`.
+- Batch independent questions for the same state into one request. Put code-found candidates into a `choice` with a `none` option.
+- Validate every request shape in tests with `assertValidRequest` from `jev/contract.mjs`, and stub Jev with `answerRequest`.
+- Treat a failed or low-confidence judgment as "needs human review", not a default answer.
+- API: POST https://api.typesafe.ai/v1/systemone, `Authorization: Bearer $TYPESAFE_API_KEY`, model `jev-latest`.
+  Live docs: https://docs.typesafe.ai/llms.txt (append `.md` to any page path).
+- Reference implementation: `inbox-intelligence/` (rubric.json, tests in test/rubric.test.mjs).

@@ -1,0 +1,131 @@
+{
+  "useCase": "inbox-intelligence",
+  "version": "1.0.0",
+  "model": "jev-latest",
+  "about": "The judgments Jev answers for the inbox brief. Code supplies the state and owns the policy (thresholds, weights, labels). Placeholders: {{owner}}, {{role}}, {{i}} (event index in state.events).",
+  "groups": {
+    "thread": {
+      "state": "{ owner: {name, role}, today, thread: { subject, counterpart: {name, email, known_relationship}, other_participants[], message_count, last_message_from_owner, days_since_last_message, recent_messages: [{from, sent, text}] } }",
+      "questions": {
+        "category": {
+          "type": "choice",
+          "instructions": "Which area of {{owner}}'s work is `thread` mainly about? {{owner}} is the owner of this inbox.",
+          "criteria": {
+            "client_delivery": "Work for an existing client: engagements, deliverables, workshops, feedback, scheduling client sessions",
+            "new_business": "Winning new work: enquiries, prospects, proposals, pricing, introductions to potential clients",
+            "partnerships_speaking": "Partnerships, collaborations, speaking, media, podcasts, advisory boards, community",
+            "finance_admin": "Invoices, payments, contracts, legal, tax, insurance, accounts, suppliers",
+            "team_ops": "Running {{owner}}'s own business: associates, contractors, tools, internal planning",
+            "personal": "Personal or family matters unrelated to work",
+            "automated_notification": "Machine-generated message from a system or service, with no person expecting a reply",
+            "other": "None of the above"
+          }
+        },
+        "needs_owner_action": {
+          "type": "noul",
+          "instructions": "Considering the whole of `thread`, is someone waiting on {{owner}} (the owner) for a reply, decision, approval, information or deliverable that the thread does not show {{owner}} has already given?",
+          "criteria": {
+            "true": "Yes: a question, request or proposal is addressed to {{owner}} and is still unanswered or undelivered",
+            "false": "No: nothing is outstanding from {{owner}}; the thread is informational, already answered, or closed with thanks"
+          }
+        },
+        "awaiting_others": {
+          "type": "noul",
+          "instructions": "Considering the whole of `thread`, is {{owner}} (the owner) waiting on someone else for a reply, decision, document or action that has not yet arrived in the thread?"
+        },
+        "owner_commitment_open": {
+          "type": "noul",
+          "instructions": "Did {{owner}} (the owner) personally commit in `thread` to do something (send, review, introduce, call, deliver) that later messages do not show as done?"
+        },
+        "relationship_risk": {
+          "type": "noul",
+          "instructions": "Does `thread` show a risk to {{owner}}'s relationship with the other party: dissatisfaction, complaint, escalation, frustration at slow response, a dispute, or a threat to cancel?"
+        },
+        "urgency": {
+          "type": "score",
+          "instructions": "How time-critical is `thread` for {{owner}} as of `today`?",
+          "criteria": [
+            "No time pressure: informational, or no action needed",
+            "Weeks: something to handle this month",
+            "This week: needs handling within the next few working days",
+            "Immediate: due within 48 hours, overdue, or explicitly marked urgent"
+          ]
+        },
+        "strategic_value": {
+          "type": "score",
+          "instructions": "How much does `thread` matter to {{owner}}'s business, given their role as {{role}}?",
+          "criteria": [
+            "None: no business relevance",
+            "Routine: ordinary operations or logistics",
+            "Significant: active client work, revenue, or a relationship that matters",
+            "Material: new revenue opportunity, senior executive stakeholder, or contractual, financial or reputational stakes"
+          ]
+        },
+        "deadline": {
+          "type": "choice",
+          "optional": "Asked only when code found date phrases; code adds one option per candidate (d1…d6) before `none`.",
+          "instructions": "Each option is a date mentioned in `thread`, already resolved to a calendar date. Which one is a deadline or scheduled commitment that {{owner}} (the owner) must act on or attend? A date that is only background, in the past, or someone else's commitment is not.",
+          "criteria": {
+            "none": "None of these is a deadline or commitment for {{owner}}"
+          }
+        }
+      }
+    },
+    "bulk": {
+      "state": "{ reader: {name, role, focus_areas[]}, email: {from, subject, text} }",
+      "questions": {
+        "kind": {
+          "type": "choice",
+          "instructions": "What kind of automated or bulk email is `email`?",
+          "criteria": {
+            "newsletter_research": "Editorial newsletter, research digest, analysis or industry news",
+            "event_invitation": "Invitation to a conference, webinar, meetup or other event",
+            "marketing_promo": "Product marketing, promotion, sale or sales outreach sent in bulk",
+            "product_notification": "Automated notice from a tool or service: activity, alerts, reminders, digests of app activity",
+            "billing_receipt": "Invoice, receipt, payment, subscription or billing notice",
+            "security_account": "Security alert, sign-in notice, password or account change",
+            "other": "None of the above"
+          }
+        },
+        "relevance": {
+          "type": "score",
+          "instructions": "How useful is `email` to `reader`, given their role and `reader.focus_areas`?",
+          "criteria": [
+            "No use: unrelated to their work or interests, or pure promotion",
+            "Marginal: loosely related; safe to skip",
+            "Useful: substantive content on one of their focus areas worth a skim this week",
+            "High value: insight, data, opportunity or event directly relevant to their advisory work that they would regret missing"
+          ]
+        }
+      }
+    },
+    "event": {
+      "state": "{ owner: {name, role}, today, events: [{ title, when, attendees[], known_relationship, description, open_email_threads[] }] }",
+      "perItem": "Question names are prefixed e{{i}}_ ; `prep` is asked only for upcoming events.",
+      "questions": {
+        "type": {
+          "type": "choice",
+          "instructions": "What kind of meeting is `events[{{i}}]` for {{owner}}?",
+          "criteria": {
+            "client": "Working session, review or check-in with an existing client",
+            "new_business": "Sales conversation, discovery call, pitch or proposal meeting with a prospective client",
+            "partner_network": "Partner, collaborator, speaking, media, investor or networking meeting",
+            "internal": "Internal: {{owner}}'s own associates, contractors or suppliers",
+            "personal": "Personal appointment unrelated to work",
+            "other": "None of the above"
+          }
+        },
+        "prep": {
+          "type": "score",
+          "instructions": "How much preparation does {{owner}} need before `events[{{i}}]`? Consider its purpose, attendees and `events[{{i}}].open_email_threads`.",
+          "criteria": [
+            "None: routine or recurring; walk in as is",
+            "Light: skim notes or the latest thread beforehand",
+            "Moderate: review materials, decide positions, or resolve an open email thread first",
+            "Substantial: a deck, proposal, analysis or decision must be ready; senior or high-stakes audience"
+          ]
+        }
+      }
+    }
+  }
+}

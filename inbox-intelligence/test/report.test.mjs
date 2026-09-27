@@ -5,7 +5,7 @@ import { buildMain, loadCode } from '../build/build-workflow.mjs';
 import { calendarEvents, items, message, thread } from './fixtures.mjs';
 import { configItem, runNode } from './harness.mjs';
 import { runReportLane } from './pipeline.mjs';
-import { assertValidRequest } from './typesafe-contract.mjs';
+import { assertValidRequest } from '../../jev/contract.mjs';
 
 const decodeMime = (raw) => {
   const mime = Buffer.from(raw, 'base64url').toString('utf8');

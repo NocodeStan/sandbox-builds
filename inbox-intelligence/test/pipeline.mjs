@@ -2,7 +2,7 @@
 // fixtures and a deterministic TypeSafe stand-in. Used by tests and by `npm run sample`.
 import { calendarEvents, items, sampleMailbox } from './fixtures.mjs';
 import { configItem, runNode } from './harness.mjs';
-import { answerRequest } from './typesafe-contract.mjs';
+import { answerRequest } from '../../jev/contract.mjs';
 
 // Steering for the sample week: what a well-calibrated model would plausibly say about each fixture.
 export const SAMPLE = {

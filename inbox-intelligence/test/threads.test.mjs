@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bulkAnswers, conversationAnswers, items, message, response, sampleMailbox, thread } from './fixtures.mjs';
 import { configItem, daysAgo, runHelpers, runNode } from './harness.mjs';
-import { assertValidRequest } from './typesafe-contract.mjs';
+import { assertValidRequest } from '../../jev/contract.mjs';
 
 const prepare = (threads, { route = 'report', staticData = {}, cfg = {} } = {}) =>
   runNode('prepare-thread', { nodes: { Config: configItem(route, cfg) }, input: items(threads), staticData }).map((i) => i.json);
