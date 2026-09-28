@@ -130,8 +130,7 @@ flowchart LR
    AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app... node airtable/setup-airtable.mjs
    ```
    or build the tables by hand from §8.
-3. Add the two fields Airtable's API can't create:
-   - **Capacity › `Active Updated At`**: *Last modified time*, watching **only** `Active Members`.
+3. Add the field Airtable's API can't create (if you built by hand, also add **Capacity › `Active Updated At`**: *Last modified time*, watching **only** `Active Members`; the script creates it for you):
    - **Waitlist › `Send Now`**: *Button* → *Open URL*, with this formula:
      ```
      "https://YOUR-N8N-HOST/webhook/akari-waitlist/send-now?id=" & RECORD_ID() & "&k=YOUR-SEND-NOW-SECRET"

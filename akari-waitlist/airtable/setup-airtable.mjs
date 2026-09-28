@@ -8,9 +8,8 @@
 // Token scopes: data.records:read, data.records:write, schema.bases:read, schema.bases:write,
 // with access to that workspace (new base) or that base.
 //
-// Two fields can't be created through Airtable's API — add them by hand afterwards (see BUILD-GUIDE.md):
-//   Capacity › "Active Updated At"  (Last modified time → only "Active Members")
-//   Waitlist › "Send Now"           (Button → Open URL)
+// One field can't be created through Airtable's API — add it by hand afterwards (BUILD-GUIDE.md §4.2):
+//   Waitlist › "Send Now"  (Button → Open URL)
 
 const TOKEN = process.env.AIRTABLE_TOKEN;
 let BASE = process.env.AIRTABLE_BASE_ID;
@@ -106,6 +105,15 @@ if (!BASE) {
   }
 }
 
+// "Active Updated At" stamps whenever staff edit Active Members; the engine uses it to know
+// which signups a recount already includes.
+const capTable = (await api('GET', `meta/bases/${BASE}/tables`)).tables.find((t) => t.name === 'Capacity');
+if (!capTable.fields.some((f) => f.name === 'Active Updated At')) {
+  const watched = capTable.fields.find((f) => f.name === 'Active Members').id;
+  await api('POST', `meta/bases/${BASE}/tables/${capTable.id}/fields`, { name: 'Active Updated At', type: 'lastModifiedTime', options: { referencedFieldIds: [watched] } });
+  console.log('✓ created Capacity › Active Updated At (watches Active Members)');
+}
+
 if (createdCapacity) {
   const rows = LOCATIONS.flatMap((Location) => MEMBERSHIPS.map((Membership) => ({
     fields: { Queue: `${Location} · ${Membership}`, Location, Membership, 'Minimum Members': 0, 'Active Members': 0, Enabled: false },
@@ -118,4 +126,4 @@ if (createdCapacity) {
 }
 
 console.log(`\nBase ID for the n8n Config node: ${BASE}`);
-console.log('Next: add "Active Updated At" to Capacity and the "Send Now" button to Waitlist (BUILD-GUIDE.md §4.2).');
+console.log('Next: add the "Send Now" button to Waitlist (BUILD-GUIDE.md §4.2).');
