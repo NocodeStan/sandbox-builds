@@ -1,18 +1,23 @@
-// Creates the Waitlist, Capacity and Activity Log tables in an existing (empty) Airtable base
-// and seeds one Capacity row per location × membership (all switched off).
+// Builds the Airtable side of the waitlist automation: Waitlist, Capacity and Activity Log tables,
+// plus one Capacity row per location × membership (all switched off).
 //
-// Usage (Node 18+):
-//   AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app... node airtable/setup-airtable.mjs
-// Token scopes: data.records:read, data.records:write, schema.bases:read, schema.bases:write
+// Usage (Node 18+), either:
+//   New base:       AIRTABLE_TOKEN=pat... AIRTABLE_WORKSPACE_ID=wsp... node airtable/setup-airtable.mjs
+//   Existing base:  AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app...      node airtable/setup-airtable.mjs
+// Optional: AIRTABLE_BASE_NAME (default "Akari Waitlist").
+// Token scopes: data.records:read, data.records:write, schema.bases:read, schema.bases:write,
+// with access to that workspace (new base) or that base.
 //
 // Two fields can't be created through Airtable's API — add them by hand afterwards (see BUILD-GUIDE.md):
 //   Capacity › "Active Updated At"  (Last modified time → only "Active Members")
 //   Waitlist › "Send Now"           (Button → Open URL)
 
 const TOKEN = process.env.AIRTABLE_TOKEN;
-const BASE = process.env.AIRTABLE_BASE_ID;
-if (!TOKEN || !BASE) {
-  console.error('Set AIRTABLE_TOKEN and AIRTABLE_BASE_ID');
+let BASE = process.env.AIRTABLE_BASE_ID;
+const WORKSPACE = process.env.AIRTABLE_WORKSPACE_ID;
+const BASE_NAME = process.env.AIRTABLE_BASE_NAME || 'Akari Waitlist';
+if (!TOKEN || (!BASE && !WORKSPACE)) {
+  console.error('Set AIRTABLE_TOKEN and either AIRTABLE_WORKSPACE_ID (new base) or AIRTABLE_BASE_ID (existing base)');
   process.exit(1);
 }
 
@@ -74,21 +79,34 @@ async function api(method, path, body) {
   return json;
 }
 
-const existing = new Set((await api('GET', `meta/bases/${BASE}/tables`)).tables.map((t) => t.name));
-for (const t of TABLES) {
-  if (existing.has(t.name)) {
-    console.log(`• ${t.name}: already exists, skipped`);
-    continue;
-  }
-  await api('POST', `meta/bases/${BASE}/tables`, {
-    name: t.name,
-    description: t.description,
-    fields: t.fields.map(([name, spec]) => ({ name, ...spec })),
-  });
-  console.log(`✓ created ${t.name}`);
+const toSpec = (t) => ({ name: t.name, description: t.description, fields: t.fields.map(([name, spec]) => ({ name, ...spec })) });
+
+const who = await api('GET', 'meta/whoami');
+if (Array.isArray(who.scopes)) {
+  const missing = ['data.records:read', 'data.records:write', 'schema.bases:read', 'schema.bases:write'].filter((x) => !who.scopes.includes(x));
+  if (missing.length) throw new Error(`Token is missing scopes: ${missing.join(', ')}`);
 }
 
-if (!existing.has('Capacity')) {
+let createdCapacity = false;
+if (!BASE) {
+  const created = await api('POST', 'meta/bases', { name: BASE_NAME, workspaceId: WORKSPACE, tables: TABLES.map(toSpec) });
+  BASE = created.id;
+  createdCapacity = true;
+  console.log(`✓ created base "${BASE_NAME}" (${BASE}) with ${TABLES.map((t) => t.name).join(', ')}`);
+} else {
+  const existing = new Set((await api('GET', `meta/bases/${BASE}/tables`)).tables.map((t) => t.name));
+  for (const t of TABLES) {
+    if (existing.has(t.name)) {
+      console.log(`• ${t.name}: already exists, skipped`);
+      continue;
+    }
+    await api('POST', `meta/bases/${BASE}/tables`, toSpec(t));
+    if (t.name === 'Capacity') createdCapacity = true;
+    console.log(`✓ created ${t.name}`);
+  }
+}
+
+if (createdCapacity) {
   const rows = LOCATIONS.flatMap((Location) => MEMBERSHIPS.map((Membership) => ({
     fields: { Queue: `${Location} · ${Membership}`, Location, Membership, 'Minimum Members': 0, 'Active Members': 0, Enabled: false },
   })));
@@ -99,4 +117,5 @@ if (!existing.has('Capacity')) {
   console.log(`✓ seeded ${rows.length} Capacity rows (all Enabled = off)`);
 }
 
-console.log('\nNext: add "Active Updated At" to Capacity and the "Send Now" button to Waitlist (BUILD-GUIDE.md §2).');
+console.log(`\nBase ID for the n8n Config node: ${BASE}`);
+console.log('Next: add "Active Updated At" to Capacity and the "Send Now" button to Waitlist (BUILD-GUIDE.md §4.2).');

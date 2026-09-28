@@ -10,7 +10,7 @@ Source of truth: Eraser board **Waitlist Automation_1.0** (11 Sep call notes + a
 |---|---|
 | `n8n/akari-waitlist-automation.json` | **Import this.** The whole automation: 54 working nodes (+7 notes) in 5 lanes + a shared executor. |
 | `n8n/akari-waitlist-error-alert.json` | **Import this too.** Emails you when any execution fails. |
-| `airtable/setup-airtable.mjs` | Optional: creates the three Airtable tables with the right field types and seeds 12 queues. |
+| `airtable/setup-airtable.mjs` | Optional: creates the base (or adds to an existing one) with the three tables, correct field types and 12 seeded queues. |
 | `src/` | Source for every Code node (the JSON is generated from here). |
 | `build/build-workflow.mjs` | Rebuilds the JSON from `src/` (`npm run build`). |
 | `test/` | 46 unit tests (`npm test`) and a 16-check end-to-end run in real n8n (`npm run e2e`). |
@@ -124,6 +124,9 @@ flowchart LR
 1. Create an empty base (a copy for testing first — see §6).
 2. Either run the script:
    ```bash
+   # creates a new base "Akari Waitlist" with all three tables (workspace ID is in the URL: airtable.com/workspaces/wsp…)
+   AIRTABLE_TOKEN=pat... AIRTABLE_WORKSPACE_ID=wsp... node airtable/setup-airtable.mjs
+   # or adds the tables to an existing empty base
    AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app... node airtable/setup-airtable.mjs
    ```
    or build the tables by hand from §8.
