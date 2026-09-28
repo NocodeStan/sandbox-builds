@@ -1,0 +1,339 @@
+<title>Waitlist Test Tracker</title>
+<style>
+/* Layout: sticky progress header + track filter, then lane sections of expandable test-case cards */
+:root{
+  --bg:#e7e3db; --surface:#f4f1ea; --surface-2:#ede9e0; --border:#d8d2c5;
+  --fg:#211e19; --muted:#6b6459; --accent:#4b6a56; --accent-fg:#f4f1ea;
+  --pass:#3f7d52; --fail:#b23b32; --blocked:#b8862e; --notstarted:#8a8377;
+  --font-display:'Fraunces',Georgia,serif; --font-body:'IBM Plex Sans',system-ui,sans-serif; --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#191712; --surface:#221f19; --surface-2:#1d1b15; --border:#35312a;
+    --fg:#efeae0; --muted:#a79e8e; --accent:#7fa98c; --accent-fg:#14231a;
+    --pass:#6fbe8c; --fail:#e2695f; --blocked:#e0b15c; --notstarted:#8a8377;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#191712; --surface:#221f19; --surface-2:#1d1b15; --border:#35312a;
+  --fg:#efeae0; --muted:#a79e8e; --accent:#7fa98c; --accent-fg:#14231a;
+  --pass:#6fbe8c; --fail:#e2695f; --blocked:#e0b15c; --notstarted:#8a8377;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);padding-inline:16px;padding-block:20px;max-width:920px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;text-wrap:balance;margin:0}
+a{color:var(--accent)}
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--border);margin-bottom:20px}
+h1{font-size:26px}
+.sub{color:var(--muted);font-size:14px;margin-top:4px;max-width:60ch}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:99px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.pill b{font-variant-numeric:tabular-nums;font-size:13px}
+.pill.pass{color:var(--pass)}.pill.fail{color:var(--fail)}.pill.blocked{color:var(--blocked)}.pill.notstarted{color:var(--muted)}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center}
+.toggle{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.toggle input{accent-color:var(--accent)}
+.settings{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:22px}
+.settings label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.settings-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{flex:1;min-width:240px}
+input[type=text]{width:100%;font:inherit;font-family:var(--font-mono);font-size:13px;padding:9px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg)}
+input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg);padding:9px 14px;font-size:13px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+button.primary:hover{filter:brightness(1.06)}
+.savehint{font-size:12px;color:var(--muted);margin-top:6px;min-height:1.2em}
+.airtable-link{font-size:13px;margin-top:10px;display:block;color:var(--muted)}
+.airtable-link a{font-family:var(--font-mono)}
+nav.jump{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin:0 0 26px}
+nav.jump a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent}
+nav.jump a:hover{color:var(--fg);border-color:var(--border)}
+section.lane{margin-bottom:34px;scroll-margin-top:120px}
+.lane-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--border)}
+.lane-head h2{font-size:19px}
+.lane-head .count{font-size:12px;color:var(--muted);font-family:var(--font-mono)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:16px 18px;margin-bottom:12px}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.card-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.tid{font-family:var(--font-mono);font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:1px 6px}
+.prio{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;padding:1px 6px;border-radius:5px}
+.prio.P0{background:color-mix(in srgb, var(--fail) 18%, transparent);color:var(--fail)}
+.prio.P1{background:color-mix(in srgb, var(--blocked) 18%, transparent);color:var(--blocked)}
+.prio.P2{background:color-mix(in srgb, var(--muted) 18%, transparent);color:var(--muted)}
+.card h3{font-size:16.5px;font-weight:600;font-family:var(--font-body)}
+.status-group{display:flex;gap:5px;flex-wrap:wrap}
+.status-btn{font-family:var(--font-mono);font-size:11px;padding:5px 10px;border-radius:99px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted)}
+.status-btn[data-active="true"]{border-color:transparent;font-weight:700}
+.status-btn[data-s="pass"][data-active="true"]{background:color-mix(in srgb, var(--pass) 22%, var(--surface));color:var(--pass)}
+.status-btn[data-s="fail"][data-active="true"]{background:color-mix(in srgb, var(--fail) 22%, var(--surface));color:var(--fail)}
+.status-btn[data-s="blocked"][data-active="true"]{background:color-mix(in srgb, var(--blocked) 22%, var(--surface));color:var(--blocked)}
+.status-btn[data-s="not_started"][data-active="true"]{background:color-mix(in srgb, var(--notstarted) 22%, var(--surface));color:var(--fg)}
+.block-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px;font-family:var(--font-mono)}
+.pre{font-size:13.5px;color:var(--muted);line-height:1.5}
+ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.65}
+ol.steps li{margin-bottom:3px}
+ul.expect{margin:0;padding-left:20px;font-size:14px;line-height:1.6}
+code{font-family:var(--font-mono);font-size:.92em;background:var(--surface-2);border-radius:4px;padding:1px 5px;word-break:break-all}
+.needsb{margin-top:10px;border-radius:8px;border:1px dashed color-mix(in srgb, var(--blocked) 55%, var(--border));background:color-mix(in srgb, var(--blocked) 9%, var(--surface));padding:10px 12px}
+.needsb .tag{font-family:var(--font-mono);font-size:10.5px;color:var(--blocked);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px}
+.needsb.hidden{display:none}
+textarea{width:100%;font:inherit;font-size:13.5px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg);padding:8px 10px;min-height:52px;resize:vertical;margin-top:10px}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.note-hint{font-size:11px;color:var(--muted);margin-top:3px}
+footer{color:var(--muted);font-size:12px;margin-top:30px;padding-top:16px;border-top:1px solid var(--border)}
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<header class="top">
+  <p class="eyebrow">Akari Sauna · Waitlist Automation</p>
+  <h1>Test Tracker</h1>
+  <p class="sub">17 cases across the 5 lanes. SendGrid isn't connected yet, but the Airtable + n8n side of every case can still be run — the state change happens before the email send in every lane, so most of this list is unblocked today.</p>
+  <div class="stats" id="stats"></div>
+  <div class="toolbar">
+    <label class="toggle"><input type="checkbox" id="hideB"> Hide the "once SendGrid is live" checks</label>
+  </div>
+</header>
+
+<div class="settings">
+  <div class="settings-row">
+    <div class="field">
+      <label for="n8nBase">n8n webhook base <span style="opacity:.7">— same value as Config → publicWebhookBase</span></label>
+      <input type="text" id="n8nBase" placeholder="https://yourteam.app.n8n.cloud/webhook/akari-waitlist">
+    </div>
+    <button class="primary" id="saveBase">Save</button>
+  </div>
+  <p class="savehint" id="saveHint">Fill this in once — every step below builds its link from it.</p>
+  <span class="airtable-link">Airtable base: <a href="https://airtable.com/appUy1kyWMjlHWwUR" target="_blank" rel="noopener">airtable.com/appUy1kyWMjlHWwUR</a></span>
+</div>
+
+<nav class="jump" id="jump"></nav>
+<main id="lanes"></main>
+
+<footer>Status and notes are shared and saved automatically. Re-run any case any time — nothing here resets on its own.</footer>
+
+<script>
+const LANES = [
+  { id: 'intake', name: '1 · Intake', desc: 'Typeform → Airtable' },
+  { id: 'engine', name: '2 · Engine', desc: 'Fills gaps, sends heads-ups, expires holds' },
+  { id: 'response', name: '3 · Candidate response', desc: 'Every link built from the token on the Airtable row — no email needed to test' },
+  { id: 'sendnow', name: '4 · Send Now', desc: 'Staff override' },
+  { id: 'report', name: '5 · Daily report', desc: '' },
+];
+
+const B = () => (state.n8nBase || '{{n8n webhook base}}').replace(/\/$/, '');
+
+const TESTS = [
+  { id:'T1', lane:'intake', prio:'P0', title:'New signup creates one row per queue',
+    pre:'Typeform webhook connected to <code>{{base}}/intake</code>; the workflow is published.',
+    steps:[ 'Submit the live Typeform, picking 2 locations and 2 memberships, with a test email you can reuse.', 'In Airtable → Waitlist, filter by that email.' ],
+    expectA:[ '4 rows appear, each <code>Status = Waiting</code>, <code>Joined At</code> = your submit time.', 'Airtable → Activity Log has 4 new rows, <code>Event = Joined</code>.' ] },
+  { id:'T2', lane:'intake', prio:'P1', title:'Duplicate submission creates nothing new',
+    pre:'T1 already run for that email.',
+    steps:[ 'Submit the exact same Typeform answers again (same email, same 2×2 selections).' ],
+    expectA:[ 'Still 4 Waitlist rows for that email — no new ones.', 'n8n → Executions: the run completes normally via the "Anything New?" → "Acknowledge Duplicate" branch.' ] },
+  { id:'T3', lane:'intake', prio:'P1', title:'A broken submission fails loudly, not silently',
+    pre:'A real Typeform can’t normally submit incomplete, so send a broken payload straight to the webhook instead.',
+    steps:[ 'Run: <code>curl -X POST {{base}}/intake -H "Content-Type: application/json" -d \'{"event_type":"form_response","form_response":{"token":"broken-test","answers":[]}}\'</code>', 'n8n → main workflow → Executions → open this run.', 'n8n → Error Alert workflow → Executions → open the matching run → click <b>Build Alert Email</b> → Output tab.' ],
+    expectA:[ 'The main run is marked failed at "Parse Typeform", naming what’s missing (email, location, membership).', 'The error workflow’s "Build Alert Email" output names the failed node and the error message — even though "Send Alert (SendGrid)" after it will itself show failed until SendGrid is connected. That’s expected for now.' ] },
+  { id:'T4', lane:'engine', prio:'P0', title:'An open spot triggers an invite',
+    pre:'Pick a queue in Capacity: Signup URL filled in, Enabled ticked, Minimum Members = Active Members + 1. At least one Waiting person on it (a T1 row works).',
+    steps:[ 'In n8n, open the main workflow and run <b>Run Engine Now (manual)</b>.', 'Check the longest-waiting person on that queue in Waitlist.' ],
+    expectA:[ '<code>Status = Invited</code>, <code>Invite Token</code> filled (48 hex characters), <code>Invite Expires At</code> = +24h, <code>Invite Source = Auto</code>.', 'Activity Log gets an <code>Invited</code> row.' ],
+    expectB:{ node:'Build Emails', text:'the invite email’s subject names the location/membership and the 24h deadline; the HTML has 4 buttons (yes, tour, notnow, no), each pointing at {{base}}/respond.' } },
+  { id:'T5', lane:'engine', prio:'P1', title:'The next in line get a heads-up',
+    pre:'Same queue as T4, with at least 3 more Waiting people behind the one just invited.',
+    steps:[ 'Run the engine again (or use the same run as T4).' ],
+    expectA:[ 'The next people in that queue (up to 10 total, minus the one already invited) → <code>Status = Primed</code>, <code>Primed At</code> set.' ],
+    expectB:{ node:'Build Emails', text:'one heads-up email per primed person, subject starting "You’re nearly at the front".' } },
+  { id:'T12', lane:'engine', prio:'P0', title:'A missed 24h window releases the spot',
+    pre:'An Invited row from T4.',
+    steps:[ 'In Airtable, set that row’s <code>Invite Expires At</code> to a time in the past (e.g. yesterday).', 'Run the engine again.' ],
+    expectA:[ 'That row → <code>Status = Warm</code>, <code>Timeout Count = 1</code>. Activity Log gets a <code>Timed Out</code> row.', 'If the queue still has an open spot, the next person → <code>Invited</code>.' ] },
+  { id:'T15', lane:'engine', prio:'P2', title:'"Prioritise New Only" skips existing members',
+    pre:'A queue with one Existing-member row and one New-member row, both Waiting, one open spot.',
+    steps:[ 'Tick <b>Prioritise New Only</b> on that Capacity row.', 'Run the engine.' ],
+    expectA:[ 'The New-member row is invited.', 'The Existing-member row stays Waiting — not invited, not primed.' ] },
+  { id:'T16', lane:'engine', prio:'P2', title:'Manual Rank overrides the queue order',
+    pre:'A queue with several Waiting rows and one open spot.',
+    steps:[ 'Set <code>Manual Rank = 1</code> on someone who joined most recently.', 'Run the engine.' ],
+    expectA:[ 'That person is invited first, ahead of everyone who’s waited longer.' ] },
+  { id:'T6', lane:'response', prio:'P0', title:'Opening the link changes nothing',
+    pre:'An Invited row (e.g. from T4). Copy its <code>Invite Token</code> value from Airtable.',
+    steps:[ 'Open <code>{{base}}/respond?t=&lt;token&gt;&a=yes</code> in a browser.', 'Check the row in Airtable again.' ],
+    expectA:[ 'You see a confirmation page with one button.', 'The row’s <code>Status</code> is still Invited — nothing has changed yet. This is deliberate: an email scanner opening the link can’t accept or decline on the candidate’s behalf.' ] },
+  { id:'T7', lane:'response', prio:'P0', title:'Yes → signed up',
+    pre:'From T6’s confirmation page.',
+    steps:[ 'Press the button on the page.' ],
+    expectA:[ 'Redirected to the Glofox signup URL for that queue.', 'Row → <code>Status = Signed Up</code>, <code>Response At</code> set.' ],
+    expectB:{ node:'Build Emails', text:'a confirmation email containing the Glofox signup link.' } },
+  { id:'T8', lane:'response', prio:'P1', title:'Unlimited removes the other waitlists automatically',
+    pre:'Same email on 2+ queues, one of them Unlimited and Invited.',
+    steps:[ 'Run T7 (a=yes) on the Unlimited row.' ],
+    expectA:[ 'The person’s other Waitlist rows → <code>Status = Removed</code>.' ] },
+  { id:'T9', lane:'response', prio:'P1', title:'A lower tier stays on the other lists',
+    pre:'Same email on 2+ queues; invite a non-Unlimited row for them.',
+    steps:[ 'Run T7 (a=yes) on the non-Unlimited row.' ],
+    expectA:[ 'The person’s other rows are untouched.' ],
+    expectB:{ node:'Build Emails', text:'the confirmation email includes a "remove me from my other waitlists" link, {{base}}/respond?t=<same token>&a=leave. Open it and confirm the other rows flip to Removed.' } },
+  { id:'T10', lane:'response', prio:'P0', title:'Tour request holds the spot with no expiry',
+    pre:'An Invited row. This is the 24 Sep clarification — worth extra care.',
+    steps:[ 'Open <code>{{base}}/respond?t=&lt;token&gt;&a=tour</code>, optionally type preferred times, press the button.', 'Run the engine again.' ],
+    expectA:[ 'Row → <code>Status = Tour Requested</code>, <code>Tour Notes</code> = what you typed.', 'This queue’s spot is <b>not</b> refilled by the engine run — the hold doesn’t expire on its own.' ],
+    expectB:{ node:'Build Emails', text:'a team-alert email naming the candidate and preferred times, mentioning Send Now for after the tour.' } },
+  { id:'T11', lane:'response', prio:'P1', title:'Not right now / no longer interested',
+    pre:'Two Invited rows.',
+    steps:[ 'Open one with <code>a=notnow</code> and the other with <code>a=no</code>, adding a reason to each on the page.' ],
+    expectA:[ 'Rows → <code>Status = Not Right Now</code> / <code>No Longer Interested</code>.', '<code>Reason</code> holds what you typed on each.' ] },
+  { id:'T13', lane:'response', prio:'P1', title:'A late reply keeps priority, no penalty',
+    pre:'A Warm row (from T12).',
+    steps:[ 'Get its token, open <code>{{base}}/respond?t=&lt;token&gt;&a=yes</code>, press the button.', 'Run the engine again right away.' ],
+    expectA:[ 'The page says the hold passed and they’re first in line; row stays <code>Warm</code>, <code>Response At</code> is now set.', 'On the engine run: they’re invited again immediately — the 72h cool-off doesn’t apply to a late reply.' ] },
+  { id:'T14', lane:'sendnow', prio:'P0', title:'Send Now works any time, and refuses a wrong key',
+    pre:'Send Now button added to Waitlist; <code>sendNowSecret</code> set in Config and not "CHANGE-ME".',
+    steps:[ 'Press <b>Send Now</b> on any row.', 'Separately, open <code>{{base}}/send-now?id=&lt;any record id&gt;&k=wrong-key</code> directly.' ],
+    expectA:[ 'Step 1: row → <code>Status = Invited</code>, <code>Invite Source = Send Now</code>, a fresh 24h hold — whatever the row’s prior status, whatever that queue’s spot count.', 'Step 2: a "Not allowed" page; the row is unchanged.' ],
+    expectB:{ node:'Build Emails', text:'the Send Now invite email, same shape as an engine-triggered one.' } },
+  { id:'T17', lane:'report', prio:'P2', title:'Daily report content is correct',
+    pre:'Run T1–T13 first so the report has something to summarise.',
+    steps:[ 'In n8n, execute the workflow starting from <b>Daily Report 7pm</b>.', 'Open that execution → <b>Build Daily Report</b> → Output tab.' ],
+    expectA:[ 'The HTML has the last-24h counts, a queue table, a conversion-by-location table, and lists your T11 reasons under "Reasons given".' ],
+    expectB:{ node:'Send Report (SendGrid)', text:'the same email actually lands in the teamEmails inboxes.' } },
+];
+
+let state = { n8nBase: '', status: {} };
+let db = null, unsubSettings = null, unsubStatus = null;
+const notesTimers = {};
+
+function fill(str){ return str.replace(/\{\{base\}\}/g, B()); }
+
+function renderStats(){
+  const counts = { pass:0, fail:0, blocked:0, not_started:0 };
+  for (const t of TESTS) counts[(state.status[t.id]||{}).status || 'not_started']++;
+  const needsB = TESTS.filter(t => t.expectB).length;
+  document.getElementById('stats').innerHTML = `
+    <span class="pill pass">✓ Pass <b>${counts.pass}</b></span>
+    <span class="pill fail">✗ Fail <b>${counts.fail}</b></span>
+    <span class="pill blocked">⏸ Blocked <b>${counts.blocked}</b></span>
+    <span class="pill notstarted">Not started <b>${counts.not_started}</b></span>
+    <span class="pill" style="border-style:dashed">${TESTS.length - needsB} of ${TESTS.length} need no email at all to fully verify</span>`;
+}
+
+function statusBtn(id, s, label, active){
+  return `<button class="status-btn" data-s="${s}" data-active="${active}" data-id="${id}" data-status="${s}">${label}</button>`;
+}
+
+function card(t){
+  const cur = (state.status[t.id]||{}).status || 'not_started';
+  const notes = (state.status[t.id]||{}).notes || '';
+  return `<div class="card" id="${t.id}">
+    <div class="card-top">
+      <div class="card-title">
+        <span class="tid">${t.id}</span>
+        <span class="prio ${t.prio}">${t.prio}</span>
+        <h3>${t.title}</h3>
+      </div>
+      <div class="status-group">
+        ${statusBtn(t.id,'not_started','Not started', cur==='not_started')}
+        ${statusBtn(t.id,'pass','Pass', cur==='pass')}
+        ${statusBtn(t.id,'fail','Fail', cur==='fail')}
+        ${statusBtn(t.id,'blocked','Blocked', cur==='blocked')}
+      </div>
+    </div>
+    <p class="pre">${fill(t.pre)}</p>
+    <p class="block-label">Steps</p>
+    <ol class="steps">${t.steps.map(s=>`<li>${fill(s)}</li>`).join('')}</ol>
+    <p class="block-label">Expected — Airtable / n8n</p>
+    <ul class="expect">${t.expectA.map(s=>`<li>${fill(s)}</li>`).join('')}</ul>
+    ${t.expectB ? `<div class="needsb"><span class="tag">Once SendGrid is connected — check "${t.expectB.node}" in this execution’s output</span>${fill(t.expectB.text)}</div>` : ''}
+    <textarea placeholder="Notes — what you saw, anything odd" data-id="${t.id}">${notes}</textarea>
+    <p class="note-hint">Saves automatically a moment after you stop typing.</p>
+  </div>`;
+}
+
+function renderLanes(){
+  const hideB = document.getElementById('hideB').checked;
+  document.querySelectorAll('.needsb').forEach(el => el.classList.toggle('hidden', hideB));
+  const jump = document.getElementById('jump');
+  jump.innerHTML = LANES.map(l => `<a href="#lane-${l.id}">${l.name}</a>`).join('');
+  const lanes = document.getElementById('lanes');
+  lanes.innerHTML = LANES.map(l => {
+    const items = TESTS.filter(t => t.lane === l.id);
+    return `<section class="lane" id="lane-${l.id}">
+      <div class="lane-head"><h2>${l.name}</h2><span class="count">${items.length} cases${l.desc ? ' · ' + l.desc : ''}</span></div>
+      ${items.map(card).join('')}
+    </section>`;
+  }).join('');
+  renderStats();
+  wireCardEvents();
+}
+
+function wireCardEvents(){
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    btn.addEventListener('click', () => setStatus(btn.dataset.id, btn.dataset.status));
+  });
+  document.querySelectorAll('textarea[data-id]').forEach(ta => {
+    ta.addEventListener('input', () => {
+      const id = ta.dataset.id;
+      clearTimeout(notesTimers[id]);
+      notesTimers[id] = setTimeout(() => saveTest(id, { notes: ta.value }), 500);
+    });
+  });
+}
+
+async function setStatus(id, s){
+  await saveTest(id, { status: s });
+}
+
+async function saveTest(id, patch){
+  if (!db) return;
+  const prev = state.status[id] || { status: 'not_started', notes: '' };
+  const next = { ...prev, ...patch, updatedAt: new Date().toISOString() };
+  state.status[id] = next; // optimistic
+  renderStats();
+  try { await db.collection('status').doc(id).set(next); }
+  catch (e) { console.error('save failed', e); }
+}
+
+async function saveBase(){
+  const val = document.getElementById('n8nBase').value.trim().replace(/\/$/, '');
+  const hint = document.getElementById('saveHint');
+  if (!db) { hint.textContent = 'Not connected — open this in claude.ai to save.'; return; }
+  try {
+    await db.doc('settings/main').set({ n8nBase: val });
+    hint.textContent = 'Saved.';
+    setTimeout(() => { hint.textContent = ''; }, 1800);
+  } catch (e) { hint.textContent = 'Could not save: ' + e.message; }
+}
+
+document.getElementById('saveBase').addEventListener('click', saveBase);
+document.getElementById('hideB').addEventListener('change', renderLanes);
+
+renderLanes(); // designed empty state before the store answers
+
+(async () => {
+  try {
+    db = await window.claude?.use?.('db');
+    if (!db) return;
+    unsubSettings = db.doc('settings/main').onSnapshot(snap => {
+      const d = snap.data();
+      state.n8nBase = (d && d.n8nBase) || '';
+      const input = document.getElementById('n8nBase');
+      if (document.activeElement !== input) input.value = state.n8nBase;
+      renderLanes();
+    }, e => console.error('settings sub', e));
+    unsubStatus = db.collection('status').onSnapshot(qs => {
+      const next = {};
+      qs.docs.forEach(d => { next[d.id] = d.data(); });
+      state.status = next;
+      const focused = document.activeElement;
+      const focusedId = focused && focused.tagName === 'TEXTAREA' ? focused.dataset.id : null;
+      renderLanes();
+      if (focusedId) document.querySelector(`textarea[data-id="${focusedId}"]`)?.focus();
+    }, e => console.error('status sub', e));
+  } catch (e) { console.error('db init', e); }
+})();
+</script>
