@@ -1,6 +1,6 @@
 export function typeformPayload({
   email = 'Jane.Doe@Example.com', locations = ['Williamsburg', 'LES'], memberships = ['Unlimited', 'Daytime'],
-  existing, first = 'Jane', last = 'Doe', token = 'tok123', zip, referral,
+  existing, first = 'Jane', last = 'Doe', token = 'tok123', zip, referral, submittedAt = '2026-09-20T15:00:00Z',
 } = {}) {
   const fields = [
     { id: 'f1', ref: 'first', type: 'short_text', title: 'First name' },
@@ -24,5 +24,5 @@ export function typeformPayload({
     referral !== undefined && { type: 'text', text: referral, field: { id: 'f9', type: 'short_text', ref: 'referral' } },
     existing !== undefined && { type: 'boolean', boolean: existing, field: { id: 'f7', type: 'yes_no', ref: 'existing' } },
   ].filter(Boolean);
-  return { event_id: `evt-${token}`, event_type: 'form_response', form_response: { form_id: 'abc', token, submitted_at: '2026-09-20T15:00:00Z', definition: { id: 'abc', fields }, answers } };
+  return { event_id: `evt-${token}`, event_type: 'form_response', form_response: { form_id: 'abc', token, submitted_at: submittedAt, definition: { id: 'abc', fields }, answers } };
 }

@@ -333,3 +333,14 @@ Date-time fields: time zone America/New_York.
 
 ## 11. Changing the logic
 Edit `src/`, run `npm test && npm run build`, and re-import the JSON (or paste the changed Code node). Keeping `src/` as the source of truth means every change stays tested.
+
+## 12. Live simulation
+
+`simulation/run-simulation.mjs` plays out a realistic multi-round wait-and-assignment cycle — intake, gap-fill, timeout, tour request, Send Now, recount, more invites — against a real Airtable base, calling the exact node code from `src/` (via the same `runNode` helper the test suite uses) rather than a reimplementation. Each step reads back what actually happened and stops immediately on any disagreement.
+
+```bash
+npm run simulate                 # MODE=mock (default) — in-memory, no credentials, safe to run anytime
+MODE=live AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app... npm run simulate
+```
+
+Writes a dated log to `simulation/log-<timestamp>.md`. In `live` mode it creates real Waitlist rows (tagged `Entry Source = Simulation`, safe to filter or delete whenever) and temporarily reconfigures the Williamsburg · Unlimited Capacity row — reset `Minimum Members` / `Active Members` / `Enabled` there before relying on that queue for anything real. No SendGrid credential is used or required: every email that would have sent is logged (subject + recipient) instead.

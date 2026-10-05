@@ -101,7 +101,8 @@ function httpJson(name, pos, method, url, body, creds, options = {}, extra = {})
 }
 
 // Airtable formulas (literal where possible; user input is stripped to safe characters)
-const F_ACTIVE = `OR({Status}="Waiting",{Status}="Primed",{Status}="Invited",{Status}="Warm",{Status}="Tour Requested",AND({Status}="Signed Up",IS_AFTER({Response At},DATEADD(NOW(),-60,"days"))))`;
+// Exported so simulation/run-simulation.mjs reads the identical "active" set production does.
+export const F_ACTIVE = `OR({Status}="Waiting",{Status}="Primed",{Status}="Invited",{Status}="Warm",{Status}="Tour Requested",AND({Status}="Signed Up",IS_AFTER({Response At},DATEADD(NOW(),-60,"days"))))`;
 const tokenFormula = (src) =>
   `={{ '{Invite Token}="' + (String(($('Config').first().json.${src} || {}).t || '').replace(/[^A-Za-z0-9]/g, '') || 'NO_TOKEN') + '"' }}`;
 const TOKEN_REC = `(($('Find Entry by Token (commit)').first().json.records || [])[0] || { fields: {} }).fields`;
