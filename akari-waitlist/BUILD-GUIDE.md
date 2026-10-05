@@ -174,7 +174,7 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 5. **Publish** (2.x) / **Activate** (1.x). The email links point at production webhook URLs, so response flows only work on a published workflow.
 
 ### 4.6 Typeform
-Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/akari-waitlist/intake` and switch it on. The parser finds fields by type and by matching choice labels, so question wording can change freely. The **choice labels** must still contain the location names (Williamsburg, Greenpoint, Lower East Side/LES) and membership names (Unlimited, Daytime, 4-Visit, Summer Pass). A yes/no question containing "existing … member" sets Member Type automatically.
+Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/akari-waitlist/intake` and switch it on. The parser finds fields by type and by matching choice labels, so question wording can change freely. The **choice labels** must still contain the location names (Williamsburg, Greenpoint, Lower East Side/LES) and membership names (Unlimited, Daytime, 4-Visit, Summer Pass) — a label meaning more than one location (e.g. "All-Access (both locations)") is matched as an alias and enrols the person in every location it covers; see `LOCATION_ALIASES` in Parse Typeform to add another. A yes/no question containing "existing … member" sets Member Type automatically. A short-text question containing "zip"/"postal" or "how … hear … about" is captured into `Zip Code` / `Referral Source`, logged but not otherwise used by the automation.
 
 ---
 
@@ -304,7 +304,7 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run e2e
 - [ ] Staff briefed on the runbook (§9)
 
 ## 8. Airtable schema (manual build)
-**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes · Notes (long text) · Send Now (button).
+**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes · Notes (long text) · Send Now (button).
 
 **Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL).
 

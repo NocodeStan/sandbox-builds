@@ -48,6 +48,26 @@ button.primary:hover{filter:brightness(1.06)}
 .savehint{font-size:12px;color:var(--muted);margin-top:6px;min-height:1.2em}
 .airtable-link{font-size:13px;margin-top:10px;display:block;color:var(--muted)}
 .airtable-link a{font-family:var(--font-mono)}
+.sim{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:22px}
+.sim h2{font-size:17px;margin-bottom:4px}
+.sim-sub{font-size:13px;color:var(--muted);margin:0 0 14px;max-width:68ch;line-height:1.5}
+.sim-sub b{color:var(--fg)}
+.sim textarea{min-height:88px;font-family:var(--font-mono);font-size:12px}
+.sim-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;margin-bottom:14px}
+.sim-status .ok{color:var(--pass);font-weight:600}
+.linklike{background:none;border:none;color:var(--accent);text-decoration:underline;padding:0;font-size:13px;cursor:pointer}
+.sim-grid{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sim-field{flex:1;min-width:180px}
+.sim-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+select{width:100%;font:inherit;font-size:13px;padding:9px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg)}
+.checkrow{display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:12px}
+.checkrow input{accent-color:var(--accent)}
+.presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.presets button{font-size:12px;padding:6px 11px}
+.sim-out{margin-top:14px;border-top:1px solid var(--border);padding-top:14px}
+.sim-out pre{background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-family:var(--font-mono);font-size:11.5px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:6px 0 10px}
+.copyrow{display:flex;gap:8px;flex-wrap:wrap}
+.detect{font-size:12px;color:var(--muted);margin:2px 0 14px}
 nav.jump{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin:0 0 26px}
 nav.jump a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent}
 nav.jump a:hover{color:var(--fg);border-color:var(--border)}
@@ -109,6 +129,8 @@ footer{color:var(--muted);font-size:12px;margin-top:30px;padding-top:16px;border
   <p class="savehint" id="saveHint">Fill this in once — every step below builds its link from it.</p>
   <span class="airtable-link">Airtable base: <a href="https://airtable.com/appUy1kyWMjlHWwUR" target="_blank" rel="noopener">airtable.com/appUy1kyWMjlHWwUR</a></span>
 </div>
+
+<div class="sim" id="sim"></div>
 
 <nav class="jump" id="jump"></nav>
 <main id="lanes"></main>
@@ -204,7 +226,158 @@ const TESTS = [
     expectB:{ node:'Send Report (SendGrid)', text:'the same email actually lands in the teamEmails inboxes.' } },
 ];
 
-let state = { n8nBase: '', status: {} };
+// ── Typeform submission simulator ──────────────────────────────
+// Labels as they read on the live form today (checked 5 Oct). If the form changes, update these —
+// they only affect which choice label the simulator writes in, not the production parser.
+const REAL_LOCATIONS = ['Williamsburg (202 Grand St.)', 'Greenpoint (149 Franklin St.)', 'All-Access (both locations)'];
+const REAL_MEMBERSHIPS = ['Unlimited', 'Daytime (weekdays 8 - 4:30pm)'];
+const EXISTING_Q_RE = /(existing|current|already).*member|member.*(already|currently)/i;
+
+function fieldTitles(fr){ return Object.fromEntries((fr?.definition?.fields || []).map(f => [f.id, f.title || ''])); }
+function randToken(){ return 'sim-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+function findAnswer(fr, titleRe, knownLabels){
+  const titles = fieldTitles(fr);
+  return (fr.answers || []).find(a => {
+    const title = titles[a.field?.id] || a.field?.ref || '';
+    if (titleRe.test(title)) return true;
+    const label = a.choice?.label || (a.choices?.labels || [])[0] || '';
+    return label && knownLabels.some(k => label === k || k.startsWith(label) || label.startsWith(k.split(' (')[0]));
+  });
+}
+function setChoice(a, label){
+  if (a.type === 'choices') a.choices = { labels: [label] };
+  else { a.type = 'choice'; a.choice = { label }; }
+}
+function hasExistingMemberQuestion(parsed){
+  if (!parsed) return false;
+  const fr = parsed.form_response || parsed;
+  const titles = fieldTitles(fr);
+  return (fr.answers || []).some(a => EXISTING_Q_RE.test(titles[a.field?.id] || a.field?.ref || ''));
+}
+
+function generateVariation(refParsed, { location, membership, email, existing, broken }){
+  if (broken) {
+    return { event_type: 'form_response', form_response: { token: randToken(), answers: [] } };
+  }
+  const root = JSON.parse(JSON.stringify(refParsed));
+  const fr = root.form_response || root;
+  fr.token = randToken();
+  fr.submitted_at = new Date().toISOString();
+  const locAns = findAnswer(fr, /location/i, REAL_LOCATIONS);
+  if (locAns) setChoice(locAns, location);
+  const memAns = findAnswer(fr, /membership/i, REAL_MEMBERSHIPS);
+  if (memAns) setChoice(memAns, membership);
+  const emailAns = (fr.answers || []).find(a => a.type === 'email');
+  if (emailAns && email) emailAns.email = email;
+  if (existing !== undefined) {
+    const titles = fieldTitles(fr);
+    const exAns = (fr.answers || []).find(a => EXISTING_Q_RE.test(titles[a.field?.id] || a.field?.ref || ''));
+    if (exAns) { if (exAns.type === 'boolean') exAns.boolean = existing; else setChoice(exAns, existing ? 'Yes' : 'No'); }
+  }
+  return root.form_response ? root : { event_type: 'form_response', form_response: fr };
+}
+
+function curlFor(payload){
+  return `curl -X POST ${B()}/intake \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(payload)}'`;
+}
+
+async function copyText(text, btn){
+  const prev = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; }
+  catch {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); btn.textContent = 'Copied'; } catch { btn.textContent = 'Select & copy manually'; }
+    document.body.removeChild(ta);
+  }
+  setTimeout(() => { btn.textContent = prev; }, 1600);
+}
+
+function renderSim(){
+  const el = document.getElementById('sim');
+  const ref = state.referencePayload;
+  let refParsed = null, refError = '';
+  if (ref) { try { refParsed = JSON.parse(ref); } catch (e) { refError = e.message; } }
+
+  if (!refParsed) {
+    el.innerHTML = `
+      <h2>Simulate a Typeform submission</h2>
+      <p class="sim-sub">Capture <b>one real submission</b> first, so every variation you generate keeps Typeform's actual payload shape (the "Contact Info" block in particular — its structure isn't worth guessing at). Submit the live Typeform once for real, then in n8n open that run → <b>Typeform: New Submission</b> → <b>Input</b> tab → copy the full JSON body.</p>
+      ${refError ? `<p class="sim-sub" style="color:var(--fail)">That didn’t parse as JSON: ${refError}</p>` : ''}
+      <textarea id="refInput" placeholder="Paste the raw webhook JSON here">${ref || ''}</textarea>
+      <div class="copyrow" style="margin-top:10px"><button class="primary" id="saveRef">Save reference payload</button></div>`;
+    document.getElementById('saveRef').addEventListener('click', () => saveReference(document.getElementById('refInput').value.trim()));
+    return;
+  }
+
+  const emailAns = (refParsed.form_response?.answers || refParsed.answers || []).find(a => a.type === 'email');
+  const detected = hasExistingMemberQuestion(refParsed);
+  el.innerHTML = `
+    <h2>Simulate a Typeform submission</h2>
+    <div class="sim-status">
+      <span class="ok">✓ Reference payload saved</span>
+      <span style="color:var(--muted)">captured from: ${emailAns?.email || 'unknown email'}</span>
+      <button class="linklike" id="replaceRef">Replace it</button>
+    </div>
+    <div class="sim-grid">
+      <div class="sim-field"><label for="simLoc">Location</label>
+        <select id="simLoc">${REAL_LOCATIONS.map(l => `<option>${l}</option>`).join('')}</select></div>
+      <div class="sim-field"><label for="simMem">Membership</label>
+        <select id="simMem">${REAL_MEMBERSHIPS.map(m => `<option>${m}</option>`).join('')}</select></div>
+      <div class="sim-field"><label for="simEmail">Test email</label>
+        <input type="text" id="simEmail" value="test+${Date.now().toString(36)}@example.com"></div>
+    </div>
+    ${detected ? `<div class="checkrow"><input type="checkbox" id="simExisting"><label for="simExisting">Mark as an existing member</label></div>`
+      : `<p class="detect">No "existing member" question detected in the reference payload — this variation will inherit whatever that submission had (likely New). Re-paste a reference once that field exists to test T15 properly.</p>`}
+    <div class="checkrow"><input type="checkbox" id="simBroken"><label for="simBroken">Make it broken instead (for T3 — ignores the fields above)</label></div>
+    <div class="presets">
+      <button id="presetWU">T1: Williamsburg · Unlimited</button>
+      <button id="presetAA">T1: All-Access · Daytime</button>
+      <button id="presetBroken">T3: broken payload</button>
+    </div>
+    <button class="primary" id="simGenerate">Generate</button>
+    <div class="sim-out" id="simOut" hidden>
+      <p class="block-label">JSON</p>
+      <pre id="simJson"></pre>
+      <div class="copyrow">
+        <button id="copyJson">Copy JSON</button>
+        <button id="copyCurl">Copy curl command</button>
+      </div>
+    </div>`;
+
+  document.getElementById('replaceRef').addEventListener('click', () => { state.referencePayload = ''; renderSim(); });
+  document.getElementById('presetWU').addEventListener('click', () => { setSel('simLoc', REAL_LOCATIONS[0]); setSel('simMem', REAL_MEMBERSHIPS[0]); document.getElementById('simBroken').checked = false; runGenerate(); });
+  document.getElementById('presetAA').addEventListener('click', () => { setSel('simLoc', REAL_LOCATIONS[2]); setSel('simMem', REAL_MEMBERSHIPS[1]); document.getElementById('simBroken').checked = false; runGenerate(); });
+  document.getElementById('presetBroken').addEventListener('click', () => { document.getElementById('simBroken').checked = true; runGenerate(); });
+  document.getElementById('simGenerate').addEventListener('click', runGenerate);
+
+  function setSel(id, val){ document.getElementById(id).value = val; }
+  function runGenerate(){
+    const payload = generateVariation(refParsed, {
+      location: document.getElementById('simLoc').value,
+      membership: document.getElementById('simMem').value,
+      email: document.getElementById('simEmail').value.trim(),
+      existing: detected ? document.getElementById('simExisting').checked : undefined,
+      broken: document.getElementById('simBroken').checked,
+    });
+    document.getElementById('simOut').hidden = false;
+    document.getElementById('simJson').textContent = JSON.stringify(payload, null, 2);
+    document.getElementById('copyJson').onclick = (e) => copyText(JSON.stringify(payload), e.target);
+    document.getElementById('copyCurl').onclick = (e) => copyText(curlFor(payload), e.target);
+  }
+}
+
+async function saveReference(value){
+  if (!db) return;
+  state.referencePayload = value;
+  renderSim();
+  try { await db.doc('settings/main').set({ n8nBase: state.n8nBase, referencePayload: value }); }
+  catch (e) { console.error('save reference failed', e); }
+}
+
+let state = { n8nBase: '', referencePayload: '', status: {} };
 let db = null, unsubSettings = null, unsubStatus = null;
 const notesTimers = {};
 
@@ -303,7 +476,7 @@ async function saveBase(){
   const hint = document.getElementById('saveHint');
   if (!db) { hint.textContent = 'Not connected — open this in claude.ai to save.'; return; }
   try {
-    await db.doc('settings/main').set({ n8nBase: val });
+    await db.doc('settings/main').set({ n8nBase: val, referencePayload: state.referencePayload });
     hint.textContent = 'Saved.';
     setTimeout(() => { hint.textContent = ''; }, 1800);
   } catch (e) { hint.textContent = 'Could not save: ' + e.message; }
@@ -313,6 +486,7 @@ document.getElementById('saveBase').addEventListener('click', saveBase);
 document.getElementById('hideB').addEventListener('change', renderLanes);
 
 renderLanes(); // designed empty state before the store answers
+renderSim();
 
 (async () => {
   try {
@@ -321,8 +495,10 @@ renderLanes(); // designed empty state before the store answers
     unsubSettings = db.doc('settings/main').onSnapshot(snap => {
       const d = snap.data();
       state.n8nBase = (d && d.n8nBase) || '';
+      state.referencePayload = (d && d.referencePayload) || '';
       const input = document.getElementById('n8nBase');
       if (document.activeElement !== input) input.value = state.n8nBase;
+      if (document.activeElement?.id !== 'refInput') renderSim();
       renderLanes();
     }, e => console.error('settings sub', e));
     unsubStatus = db.collection('status').onSnapshot(qs => {

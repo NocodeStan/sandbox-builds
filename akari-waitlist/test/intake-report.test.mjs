@@ -27,6 +27,23 @@ test('Typeform: label variants and existing-member question', () => {
   assert.deepEqual([...new Set(p.queues.map((q) => q.location))], ['Lower East Side']);
 });
 
+test('Typeform: "All-Access (both locations)" enrols in both real locations, not neither', () => {
+  const p = parse(typeformPayload({ locations: ['All-Access (both locations)'], memberships: ['Unlimited'] }));
+  assert.deepEqual(p.queues.map((q) => q.location).sort(), ['Greenpoint', 'Williamsburg']);
+});
+
+test('Typeform: Zip Code and "How did you hear about us?" are captured', () => {
+  const p = parse(typeformPayload({ zip: '11211', referral: 'Instagram' }));
+  assert.equal(p.zipCode, '11211');
+  assert.equal(p.referralSource, 'Instagram');
+});
+
+test('Typeform: missing Zip/referral leaves those fields blank, not throwing', () => {
+  const p = parse(typeformPayload());
+  assert.equal(p.zipCode, '');
+  assert.equal(p.referralSource, '');
+});
+
 test('Typeform: missing email fails loudly (so the error alert fires)', () => {
   assert.throws(() => parse(typeformPayload({ email: null })), /missing email/);
   assert.throws(() => parse({ foo: 1 }), /not a Typeform/);
@@ -47,6 +64,15 @@ test('Build New Entries skips queues the person is already on and chunks by 10',
   assert.ok(created.includes('Greenpoint|Daytime'));
   assert.equal(out[0].records[0].fields.Status, 'Waiting');
   assert.equal(out[0].typecast, true);
+});
+
+test('Build New Entries carries Zip Code and Referral Source onto every created row', () => {
+  const p = parse(typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited', 'Daytime'], zip: '11211', referral: 'Instagram' }));
+  const out = runNode('build-new-entries', {
+    nodes: { Config: [{ json: { cfg: baseConfig() } }], 'Parse Typeform': [{ json: p }], 'Find Existing Entries': records([]) },
+  }).flatMap((i) => i.json.records);
+  assert.equal(out.length, 2);
+  assert.ok(out.every((r) => r.fields['Zip Code'] === '11211' && r.fields['Referral Source'] === 'Instagram'));
 });
 
 test('Executor: updates merged per record and chunked by 10; logs chunked by 10', () => {

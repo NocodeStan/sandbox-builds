@@ -14,6 +14,8 @@ const rows = p.queues
       Name: p.name,
       Email: p.email,
       Phone: p.phone,
+      'Zip Code': p.zipCode,
+      'Referral Source': p.referralSource,
       Location: q.location,
       Membership: q.membership,
       'Member Type': p.memberType,

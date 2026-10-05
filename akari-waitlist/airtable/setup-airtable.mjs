@@ -38,6 +38,7 @@ const TABLES = [
     description: 'One row per person per queue (location × membership).',
     fields: [
       ['Name', text], ['Email', { type: 'email' }], ['Phone', { type: 'phoneNumber' }],
+      ['Zip Code', text], ['Referral Source', text],
       ['Location', select(LOCATIONS)], ['Membership', select(MEMBERSHIPS)],
       ['Member Type', select(['New', 'Existing'])], ['Entry Source', select(['Typeform', 'Admin'])],
       ['Joined At', dateTime], ['Manual Rank', integer], ['Status', select(STATUSES)],
