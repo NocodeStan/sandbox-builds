@@ -189,7 +189,7 @@ try {
     assert.equal(janePrimed.length, 2, 'Jane primed on both Williamsburg queues');
     await waitFor(() => emailsTo('jane.doe@example.com').length === 1, 'one combined heads-up for Jane');
     assert.equal(emailsTo('alex@example.com').length, 1);
-    assert.match(emailsTo('alex@example.com')[0].subject, /Unlimited spot at Williamsburg is open/);
+    assert.match(emailsTo('alex@example.com')[0].subject, /Unlimited Membership Now Available at Akari Williamsburg/);
     assert.ok(emailsTo('alex@example.com')[0].content[1].value.includes(`respond?t=${tokenOf(alex.id)}&amp;a=yes`), 'emailed link carries the stored token');
     assert.notEqual(tokenOf(alex.id), tokenOf(dana.id));
     assert.doesNotMatch(JSON.stringify(mock.state.emails), /__TOKEN__/);
@@ -225,7 +225,7 @@ try {
     await waitFor(() => emailsTo('alex@example.com').length === 2, 'confirmation email');
     const conf = emailsTo('alex@example.com')[1];
     assert.match(conf.content[1].value, /wb-unl/);
-    assert.match(conf.content[0].value, /taken you off your other waitlists/);
+    assert.match(conf.content[0].value, /automatically remove you from any other Akari waitlists/);
     assert.equal(logs('Signed Up').length, 1);
   });
 
@@ -234,7 +234,7 @@ try {
     assert.equal(r.status, 200);
     await waitFor(() => get(dana.id).fields.Status === 'Tour Requested', 'Dana tour requested');
     assert.equal(get(dana.id).fields['Tour Notes'], 'Saturday 10am');
-    await waitFor(() => emailsTo('team@YOUR-DOMAIN.com').some((m) => /Tour request: Dana/.test(m.subject)), 'team alert');
+    await waitFor(() => emailsTo('team@YOUR-DOMAIN.com').some((m) => /Tour Request: Dana/.test(m.subject)), 'team alert');
   });
 
   await step('Send Now: wrong key is refused', async () => {

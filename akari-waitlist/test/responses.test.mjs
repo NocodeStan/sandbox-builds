@@ -36,7 +36,7 @@ test('Yes on Unlimited → removed from every other waitlist automatically', () 
   assert.equal(byId(r.actions, o1.id)[0].fields.Status, 'Removed');
   assert.equal(byId(r.actions, o2.id)[0].fields.Status, 'Removed');
   assert.equal(byId(r.actions, closed.id).length, 0);
-  assert.match(r.actions[0].email.text, /taken you off your other waitlists/);
+  assert.match(r.actions[0].email.text, /automatically remove you from any other Akari waitlists/);
 });
 
 test('Yes on a lower tier → stays on other lists, email offers a one-click way off', () => {
@@ -74,7 +74,7 @@ test('Tour within the hold → Tour Requested (spot stays held), team alerted wi
 test('Tour after the hold expired → Warm, team still alerted', () => {
   const a = decide(invited({ 'Invite Expires At': hoursAgo(1) }), 'tour').actions[0];
   assert.equal(a.fields.Status, 'Warm');
-  assert.match(a.email.subject, /\(late\)/);
+  assert.match(a.email.subject, /\(late reply\)/);
 });
 
 test('Yes after a tour (status Tour Requested, original hold long gone) → Signed Up', () => {
@@ -170,7 +170,7 @@ test('Send Now invites anyone immediately, whatever their status, with a fresh 2
     const a = r.actions[0];
     assert.equal(a.fields.Status, 'Invited');
     assert.equal(a.fields['Invite Source'], 'Send Now');
-    assert.match(a.email.html, /claim my spot/);
+    assert.match(a.email.html, />Sign up</);
     assert.match(a.log.Detail, new RegExp(`previous status: ${status}`));
   }
 });

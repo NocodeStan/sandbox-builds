@@ -16,6 +16,10 @@ const cfg = {
   replyToEmail: 'hello@YOUR-DOMAIN.com',
   teamEmails: ['team@YOUR-DOMAIN.com'], // daily report + tour-request alerts
 
+  // Email content (confirmed with Jack, 9 Oct)
+  membershipPageUrl: 'https://www.akarisauna.com/membership', // same for every location
+  priceByTier: { Unlimited: 220, Daytime: 165, '4-Visit': 140 }, // $/month; no "Summer Pass" price yet — update when it's live on the form
+
   // Safety switches — leave as-is until testing is signed off
   engineEnabled: true, // false = the hourly engine does nothing (webhooks still work)
   sandboxMode: true, // true = SendGrid accepts but delivers nothing

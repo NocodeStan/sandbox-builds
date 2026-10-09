@@ -34,41 +34,66 @@ if (e.status === 'Signed Up' && action !== 'leave') {
 }
 
 function confirmationEmail(removed, stillOn) {
-  const link = signupUrl
-    ? btn(signupUrl, 'Complete signup and payment', true)
-    : '<p><strong>We\'ll email your signup link shortly.</strong></p>';
-  let overlap = '';
-  let overlapText = '';
-  if (removed.length) {
-    overlap = `<p style="font-size:14px;color:#5b544b">As you've chosen Unlimited, we've taken you off your other waitlists (${esc(listOf(removed).join(', '))}).</p>`;
-    overlapText = `As you've chosen Unlimited, we've taken you off your other waitlists (${listOf(removed).join(', ')}).`;
-  } else if (stillOn.length) {
-    overlap = `<p style="font-size:14px;color:#5b544b">You're still on our waitlist for ${esc(listOf(stillOn).join(', '))}. Want to stay on? No action needed. Otherwise:</p>${btn(respondLink(e.token, 'leave'), 'Remove me from my other waitlists')}`;
-    overlapText = `You're still on our waitlist for ${listOf(stillOn).join(', ')}. To come off those: ${respondLink(e.token, 'leave')}`;
-  }
+  const linkText = signupUrl || '(signup link pending — we\'ll send it shortly)';
+  const linkHtml = signupUrl ? `<a href="${esc(signupUrl)}" style="color:#1f1d1a">${esc(signupUrl)}</a>` : esc(linkText);
+  const unlimited = removed.length > 0;
+  const overlap = unlimited
+    ? `<p>Once you sign up for your Unlimited membership, we'll automatically remove you from any other Akari waitlists you've joined.</p>`
+    : stillOn.length
+      ? `<p>You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: <a href="${esc(respondLink(e.token, 'leave'))}" style="color:#1f1d1a">${esc(respondLink(e.token, 'leave'))}</a></p>`
+      : '';
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
-<p>The <strong>${esc(q)}</strong> is yours. Complete your signup and payment here:</p>
-${link}${overlap}
-<p style="font-size:14px;color:#5b544b">Questions? Just reply to this email.</p>`);
+<p>Thank you for your interest in joining Akari! Here is your private sign up link for your ${esc(e.membership)} membership at Akari ${esc(e.location)}: ${linkHtml}</p>
+${overlap}
+<p>Please let us know if you have any issues signing up!</p>
+<p>Warmly,<br>Akari team</p>`, `Your ${e.membership} membership is ready for you`);
   const text = `Hi ${firstName(e.name)},
 
-The ${q} is yours. ${signupUrl ? `Complete your signup and payment here: ${signupUrl}` : "We'll email your signup link shortly."}
-${overlapText}`;
-  return { to: e.email, name: e.name, subject: `Your ${e.membership} spot at ${e.location} — finish signing up`, html, text };
+Thank you for your interest in joining Akari! Here is your private sign up link for your ${e.membership} membership at Akari ${e.location}: ${linkText}
+
+${unlimited
+    ? 'Once you sign up for your Unlimited membership, we\'ll automatically remove you from any other Akari waitlists you\'ve joined.'
+    : stillOn.length ? `You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: ${respondLink(e.token, 'leave')}` : ''}
+
+Please let us know if you have any issues signing up!
+
+Warmly,
+Akari team`;
+  return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for Akari ${e.location}`, html, text };
 }
 
 function tourAlert(late) {
+  const signupDate = fmtTime(e.joinedAt);
+  // Tour Requested holds never expire on their own once set (unlike a plain Invited hold) — say so
+  // plainly rather than echoing the original 24h deadline, which no longer applies once held this way.
+  const holdUntil = late ? 'Not held — the original window passed before they replied' : 'No deadline — held until your team follows up';
   const html = emailLayout(`
-<p><strong>${esc(e.name || e.email)}</strong> has asked for a tour before joining <strong>${esc(q)}</strong>.</p>
-<p>Email: ${esc(e.email)}<br>Phone: ${esc(e.phone || '—')}<br>Preferred times: ${esc(note || '—')}</p>
+<p>Hi team,</p>
+<p><strong>${esc(e.name || e.email)}</strong> would like to tour Akari ${esc(e.location)} before committing to a ${esc(e.membership)} membership. Their details are below:</p>
+<p>Email: ${esc(e.email)}<br>Phone: ${esc(e.phone || '—')}<br>On the waitlist since: ${esc(signupDate)}<br>Spot held until: ${esc(holdUntil)}${note ? `<br>Preferred times: ${esc(note)}` : ''}</p>
+<p>Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.</p>
 <p>${late
-    ? 'They replied after their hold expired, so the spot was <strong>not</strong> held. They are now first in line (Warm).'
-    : 'Their spot is being held (status: Tour Requested) and will not time out. After the tour, press <strong>Send Now</strong> on their Airtable row to send the signup link, or change their status.'}</p>`);
-  const text = `${e.name || e.email} has asked for a tour before joining ${q}.
-Email: ${e.email} | Phone: ${e.phone || '-'} | Preferred times: ${note || '-'}
-${late ? 'Replied after the hold expired: spot NOT held; now first in line (Warm).' : 'Spot held (Tour Requested). After the tour, press Send Now on their Airtable row.'}`;
-  return { to: CFG.teamEmails, subject: `Tour request: ${e.name || e.email} — ${e.membership} at ${e.location}${late ? ' (late)' : ''}`, html, text };
+    ? 'Because they replied after their original hold expired, the spot was <strong>not</strong> held for them — they\'re now first in line (Warm) for the next opening.'
+    : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}</p>
+<p>If they decide to join${late ? '' : ' after the tour'}, press <strong>Send Now</strong> on their row in Airtable — that sends them a fresh invite with their private sign up link.</p>
+<p>Thank you,<br>Akari team</p>`, 'Please reach out within 1 business day to schedule');
+  const text = `Hi team,
+
+${e.name || e.email} would like to tour Akari ${e.location} before committing to a ${e.membership} membership. Their details are below:
+Email: ${e.email} | Phone: ${e.phone || '-'} | On the waitlist since: ${signupDate} | Spot held until: ${holdUntil}${note ? ` | Preferred times: ${note}` : ''}
+
+Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.
+
+${late
+    ? 'Because they replied after their original hold expired, the spot was NOT held for them — they\'re now first in line (Warm) for the next opening.'
+    : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}
+
+If they decide to join${late ? '' : ' after the tour'}, press Send Now on their row in Airtable — that sends them a fresh invite with their private sign up link.
+
+Thank you,
+Akari team`;
+  return { to: CFG.teamEmails, subject: `Tour Request: ${e.name || e.email} at Akari ${e.location}${late ? ' (late reply)' : ''}`, html, text };
 }
 
 switch (action) {
