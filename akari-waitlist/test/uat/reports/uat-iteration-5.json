@@ -1,0 +1,1060 @@
+{
+ "label": "iteration-5",
+ "counts": {
+  "pass": 140,
+  "fail": 0,
+  "risk": 2,
+  "open": 5
+ },
+ "scenarios": [
+  {
+   "id": "T1",
+   "title": "New member signs up via Typeform",
+   "story": "Maya fills in the form for Unlimited at Williamsburg, giving her zip and that she heard about us on Instagram.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Typeform gets a 200 so it does not retry",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "one Waiting row appears for Unlimited · Williamsburg",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "email is stored lower-case",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "zip code and referral source are captured",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "name and phone are captured",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "a \"Joined\" entry is logged",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T2",
+   "title": "\"All-Access (both locations)\" choice",
+   "story": "Leo, an existing member, picks the All-Access option and Unlimited.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Leo is on both Williamsburg and Greenpoint Unlimited",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "both rows are marked as an Existing member",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T3",
+   "title": "\"LES\" shorthand for a location that is not open yet",
+   "story": "Priya picks \"LES\" — the Lower East Side queue is switched off until opening.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Priya is on the Lower East Side Unlimited list",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T4",
+   "title": "Messy email + descriptive choice labels",
+   "story": "Sam types their email with capitals and spaces; the form labels read \"Daytime (weekdays before 4pm)\" and \"4-Visit Pack\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "email is trimmed and lower-cased",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "both memberships are recognised",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "apostrophe in the surname survives",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T5",
+   "title": "Same person submits twice",
+   "story": "Maya submits the identical form again a few minutes later.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Typeform still gets a 200",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no duplicate row, no extra \"Joined\" log",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T6",
+   "title": "Same person adds a second membership",
+   "story": "Maya comes back and ticks Unlimited and Daytime.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "only the new Daytime row is added",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "her Unlimited place in line is untouched",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T7",
+   "title": "Broken submission",
+   "story": "A form arrives with no email or choices (e.g. a question was renamed in Typeform).",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Typeform gets an error (so it shows as a failed delivery and can be resent)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the team gets an alert email naming what is missing",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T8",
+   "title": "Summer Pass (no price set yet)",
+   "story": "Noor joins the Greenpoint Summer Pass list.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Noor is on Greenpoint Summer Pass",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T9",
+   "title": "Someone types HTML into their name",
+   "story": "A form arrives with first name \"<b>Zed</b>\" and last name \"\\\"Q\\\"\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "the row is created (name stored as typed)",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "T10",
+   "title": "\"Existing member\" answered as a multiple-choice",
+   "story": "Jo answers \"Yes, I'm a current member\" (a choice question, not yes/no).",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Jo is recorded as an Existing member",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "E1",
+   "title": "First hourly run fills open spots",
+   "story": "Williamsburg Unlimited has 2 open spots, Summer Pass 1, Williamsburg 4-Visit has a mistyped minimum of 500 (meant 50), Greenpoint 4-Visit has no signup link, LES is switched off.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Williamsburg Unlimited: Cleo (manual rank 1) and Ava (longest weighted wait) are invited",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Summer Pass: Noor is invited",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Greenpoint 4-Visit (no signup link): nobody invited",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Lower East Side (switched off): nobody invited or nudged",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the mistyped minimum (500) only lets 10 invites out in one run",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "…and the 10 are the 10 longest-waiting (Guest01–Guest10)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "a mistyped minimum is stopped, not just slowed (it would keep sending 10 invites every hour)",
+     "status": "OPEN",
+     "detail": "The per-run cap limits the damage to 10/hour per queue but nothing pauses the queue or alerts staff; the daily report does not flag an implausible minimum."
+    },
+    {
+     "desc": "nobody holds two spots at once (Cleo is on 2 lists, Guest01/03 on 2 lists)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "heads-up goes to the next in line: Ben, Jo, Maya, Leo, Zed (Williamsburg Unlimited), Sam (Greenpoint 4-Visit), Guest11, Guest12",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Maya gets ONE heads-up covering both her lists",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "nobody gets an invite and a heads-up in the same minute (Guest01, Guest03)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Leo (existing member) gets no heads-up for Greenpoint Unlimited, which is set to \"Prioritise New Only\"",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "C1",
+   "title": "Jack reviews the invite copy",
+   "story": "Jack opens the invites Cleo (Unlimited), Guest02 (4-Visit) and Noor (Summer Pass) received and compares them with his approved copy.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "subject: \"Unlimited Membership Now Available at Akari Williamsburg\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "inbox preview: \"Your spot is available for a limited time\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "opens \"Hi Cleo,\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Unlimited price $220/month",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "4-Visit price $140/month",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Summer Pass (no price yet) falls back to \"details, including pricing, … membership page\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the membership page is a clickable link in the email",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "deadline shown is 24 hours out",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "four buttons in Jack's order: Sign up · Tour first · Not ready yet · No longer interested",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "\"Not ready yet\" explains they stay on the list",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "signed \"Warmly, Akari team\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "each button carries this person's own token",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "C2",
+   "title": "Jack reviews the heads-up copy",
+   "story": "Jack compares the \"nearly at the front\" email with his draft (template 3), with the hold at 24h not 48h.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "subject follows Jack's template: \"You're Almost Up for an Unlimited Membership at Akari Williamsburg\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "inbox preview: \"A spot could open up any day now\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "body follows Jack's wording (\"close to the front of the line…\")",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "states the real hold: 24 hours (not 48)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "tells them how to come off the list",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "signed \"Warmly, Akari team\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Maya's combined heads-up names both memberships",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "a name typed as HTML is shown as text, not rendered",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the heads-up offers a one-click way off the list (Jack's {{remove_link}})",
+     "status": "OPEN",
+     "detail": "no match for /a=remove|a=leave/ in: “<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f1ec;font-family:Helvetica,Arial,sans-serif;color:#1f1d1a\"> <div style=\"display:none;font-size:1px;color:#f4f1ec;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all\"”"
+    }
+   ]
+  },
+  {
+   "id": "R1",
+   "title": "Cleo signs up (Unlimited) — after her mail scanner pre-clicks every link",
+   "story": "Cleo's work email security scanner opens all four links first. Then Cleo clicks \"Sign up\" and confirms.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "the scanner's clicks change nothing",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the link opens a confirmation page showing the hold deadline",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the confirm button can't be double-submitted (button disables on submit)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "confirming sends her straight to the Williamsburg Unlimited signup page",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "status → Signed Up",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "she is removed from her Williamsburg Daytime list automatically",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "confirmation subject: \"Your Private Sign Up Link for Akari Williamsburg\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "confirmation preview: \"Your Unlimited membership is ready for you\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "confirmation carries the private signup link",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Unlimited wording: \"we'll automatically remove you from any other Akari waitlists\"",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R2",
+   "title": "Ava wants a tour first",
+   "story": "Ava clicks \"Tour first\" and writes \"Weekday evenings after 6\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Ava is told her spot is held",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "status → Tour Requested, notes saved",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "team alert: \"Tour Request: Ava Romero at Akari Williamsburg\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "alert lists email, phone, waitlist date and preferred times",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "alert reads naturally: \"committing to an Unlimited membership\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "alert tells staff exactly what to do after the tour (Send Now)",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R3",
+   "title": "Noor is not ready yet",
+   "story": "Noor clicks \"Not ready yet\" and writes \"Back in town in November\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Noor is told she stays on the list",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "status → Not Right Now with her reason",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Jack's copy promises \"we'll check back in with you down the road\" — something brings Noor back to Jack's attention later",
+     "status": "OPEN",
+     "detail": "Not Right Now is a dead end: the engine never re-offers, and the daily report only shows the reason on the day it is given."
+    }
+   ]
+  },
+  {
+   "id": "R4",
+   "title": "Guest02 is no longer interested",
+   "story": "Guest02 clicks \"No longer interested\": \"Too far from me\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "status → No Longer Interested with reason",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no email is sent to them",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R5",
+   "title": "Guest03 signs up for 4-Visit, then leaves the Daytime list",
+   "story": "Guest03 also waits for Williamsburg Daytime. After signing up they use the link in the confirmation to come off the other list.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "4-Visit wording: stays on other waitlists, with a link to come off them",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "they are still on the Daytime list until they choose",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the \"remove me\" link opens a confirmation page first",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "after confirming: removed from Daytime; 4-Visit signup untouched",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the page says what they were removed from",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R6",
+   "title": "Guest04 says \"not ready\", then changes their mind within the hour",
+   "story": "Guest04 clicks \"Not ready yet\", then goes back to the same email and clicks \"Sign up\".",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "the page does not wrongly say their hold \"passed before we heard back\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the page tells them they're first in line for the next spot",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "status → Warm (first in line)",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R7",
+   "title": "Three people click \"Sign up\" in the same second",
+   "story": "Guest05, Guest06 and Guest07 confirm at the same moment (invites landed together at 9am). Airtable allows 5 requests a second and locks the base for 30s if exceeded.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "nobody sees a raw n8n error — each gets the signup page or a friendly \"try again in a minute\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the \"busy\" page retries by itself after a random 35–55s, so people caught in one burst don't all retry in the same second",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "everyone told \"try again\" gets through on the automatic retry",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "all three are Signed Up",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "each gets exactly one confirmation, with no \"other waitlists\" paragraph (they have none)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "anyone shown the signup page is recorded as Signed Up, even though Airtable was locked when they clicked",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Airtable's 5 requests/second limit was not exceeded",
+     "status": "RISK",
+     "detail": "1 burst(s) tripped Airtable's 30s lockout; handled gracefully (see checks above)"
+    }
+   ]
+  },
+  {
+   "id": "R8",
+   "title": "Guest08 double-clicks \"Sign up\"",
+   "story": "Guest08 hits the confirm button twice in quick succession, then a third time a minute later.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "a fast double POST (bypassing the disabled button) still sends only one confirmation",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "a later click just re-opens signup — no new email, nothing changes",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "…and the page still takes them to signup",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "R9",
+   "title": "Someone tampers with a link",
+   "story": "A made-up token is posted to the confirm endpoint.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "both are refused with \"link has expired\" (410)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no data changes",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S1",
+   "title": "Send Now with a bad key",
+   "story": "Someone edits the Airtable button URL and the key is wrong.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "refused (403) and nothing sent",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S2",
+   "title": "Jack uses Send Now for an LES pre-opening member",
+   "story": "LES is switched off, but Jack wants to invite Priya now. He clicks the button twice.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "page: \"Invite sent\", with the hold deadline",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Priya → Invited (source: Send Now)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "second click within 2 minutes is ignored (\"Already sent\")",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Priya received exactly one invite",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "invite subject names the location: \"…at Akari Lower East Side\"",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S3",
+   "title": "Priya signs up but LES has no signup link yet",
+   "story": "Priya clicks \"Sign up\"; the LES Capacity row has no Signup URL.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "Priya is told her spot is confirmed and the link will follow",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "status → Signed Up",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the log flags \"SIGNUP URL MISSING\" for staff",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "D1",
+   "title": "Jack reads the daily report",
+   "story": "The team report arrives. Jack checks it covers today and points him at what needs action.",
+   "when": "Day 0",
+   "checks": [
+    {
+     "desc": "one report email to the team",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "needs attention: Greenpoint 4-Visit has no signup link",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "needs attention: Priya signed up but needs her link sent manually",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "signed-up count covers Cleo, Guest03, 05, 06, 07, 08 and Priya (7)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "reasons given today are listed (Guest02 and Noor)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "report is scheduled for 7:30am, before doors open (Jack's spec)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "report layout matches Jack's template 4 (Needs attention / Last 24 hours / By location)",
+     "status": "OPEN",
+     "detail": "no match for /Invites expiring in the next 24 hours/ in: “<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f1ec;font-family:Helvetica,Arial,sans-serif;color:#1f1d1a\"> <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:24px 12px\"> <table role”"
+    }
+   ]
+  },
+  {
+   "id": "E2",
+   "title": "Next morning: unanswered holds time out, the line moves on",
+   "story": "Guest01, Guest09, Guest10 never replied. Guest04 changed their mind yesterday and was told they're first in line.",
+   "when": "Day 1 +1h",
+   "checks": [
+    {
+     "desc": "Guest01, Guest09, Guest10 → Warm (1st timeout)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Ava's tour hold does not time out",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Guest04 (told \"first in line\") is re-invited straight away",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "people who simply ignored us (Guest01/09/10) wait out the 72h cool-down",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Guest11 and Guest12 get their turn",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Williamsburg Unlimited: no new invite while Cleo's signup awaits Jack's recount and Ava's tour holds the other spot",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S4",
+   "title": "Jack recounts and adds a spot; Guest09 replies late",
+   "story": "Jack updates Williamsburg Unlimited: Active 39 (Cleo joined), Minimum 41. Guest09 finds yesterday's email and clicks \"Sign up\".",
+   "when": "Day 1 +1h",
+   "checks": [
+    {
+     "desc": "Guest09 is told the hold passed and they're first in line",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Guest09 stays Warm, reply time recorded",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the new Williamsburg Unlimited spot goes to Ben (existing member, 121 days waiting)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Guest09 (late reply) is re-invited; Guest10 (no reply) is not",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S5",
+   "title": "After Ava's tour, Jack sends her the invite again",
+   "story": "Ava loved the tour. Jack presses Send Now on her row; Ava uses the new email.",
+   "when": "Day 1 +1h",
+   "checks": [
+    {
+     "desc": "page: \"Invite sent\"",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the old invite's links stop working (410)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Ava → Signed Up, sent to signup",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "S6",
+   "title": "A new member fills in the form again",
+   "story": "Cleo (signed up yesterday) fills in the Typeform again out of habit, ticking Williamsburg Unlimited.",
+   "when": "Day 1 +1h",
+   "checks": [
+    {
+     "desc": "she is not put back on the waitlist for the membership she just bought",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "E4",
+   "title": "Day 4: cool-downs end, repeat no-shows drop out",
+   "story": "Three days later. Guest09 ignored their second invite. Ben ignored his.",
+   "when": "Day 4 +1h",
+   "checks": [
+    {
+     "desc": "Guest09 (2nd timeout) → No Reply, out of the line",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Guest10 (cool-down over) is invited again",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Ben timed out → Warm; the Williamsburg Unlimited spot goes to Maya (Ben is cooling down)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Maya asks for a tour; the alert reads \"an Unlimited membership\"",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "D2",
+   "title": "Day 12 report: what has been forgotten?",
+   "story": "Nobody followed up on Maya's tour. Noor said \"not ready\" 12 days ago.",
+   "when": "Day 12 +1h",
+   "checks": [
+    {
+     "desc": "flags Maya's tour hold as stale (over 7 days)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "flags Greenpoint Summer Pass: open spot, nobody left to invite",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "lists \"Not ready yet\" people due a check-in (Noor)",
+     "status": "OPEN",
+     "detail": "no match for /Noor/ in: “<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f1ec;font-family:Helvetica,Arial,sans-serif;color:#1f1d1a\"> <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:24px 12px\"> <table role”"
+    }
+   ]
+  },
+  {
+   "id": "X1",
+   "title": "The hourly run starts just as people reply",
+   "story": "Jack uses Send Now for Jo and Leo. Their replies land in the same second the hourly engine starts — more than Airtable's 5 requests/second, so the base locks for 30s.",
+   "when": "Day 12 +1h",
+   "checks": [
+    {
+     "desc": "neither person sees a raw error",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "Jo ends Signed Up with one confirmation; Leo ends Not Right Now with his reason",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "any alert from the collision tells Jack it was a temporary rate limit needing no action",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the next hourly run completes normally",
+     "status": "PASS",
+     "detail": ""
+    }
+   ]
+  },
+  {
+   "id": "I1",
+   "title": "Data integrity across the whole run",
+   "story": "What Jack would spot-check in Airtable and the inbox.",
+   "when": "Day 12 +1h",
+   "checks": [
+    {
+     "desc": "every dropdown value written is one Airtable already has (no stray options)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "every Invited row has a 48-character token and a deadline",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "nobody holds two spots at once",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "every Signed Up row has a matching \"Signed Up\" log",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no email contains \"undefined\", \"NaN\", \"null\", \"[object Object]\" or a placeholder token",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "every email has both a plain-text and an HTML version, and a subject",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "the only error alerts all week: the deliberately broken form, plus \"temporary rate limit\" notices",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "everyone marked Invited actually received an invite email with their current link",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "everyone marked Signed Up who has a signup link was emailed it",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no rejected Airtable/SendGrid calls (bad formulas, >10-row batches, bad payloads)",
+     "status": "PASS",
+     "detail": ""
+    },
+    {
+     "desc": "no Airtable rate-limit hits all week",
+     "status": "RISK",
+     "detail": "3 request(s) got HTTP 429"
+    }
+   ]
+  }
+ ],
+ "timeline": [
+  "Day 0 · engine run (Day 0 9am): 13 invited, 9 heads-ups, 0 timed out · HTTP 200",
+  "Day 0 · burst of 3 replies → pages: 200 “Taking you to signup”, 503 “Please try again in a minute”, 503 “Please try again in a minute”",
+  "⏩ 25h pass → Day 1 +1h",
+  "Day 1 +1h · engine run (Day 1 10am): 3 invited, 1 heads-ups, 3 timed out · HTTP 200",
+  "Day 1 +1h · engine run (Day 1 11am): 2 invited, 0 heads-ups, 0 timed out · HTTP 200",
+  "⏩ 72h pass → Day 4 +1h",
+  "Day 4 +1h · engine run (Day 4): 3 invited, 0 heads-ups, 5 timed out · HTTP 200",
+  "⏩ 192h pass → Day 12 +1h",
+  "Day 12 +1h · collision: engine + 2 replies → 1 lockout(s); pages 200, 503",
+  "Day 12 +1h · engine run (Day 12, next hour): 0 invited, 0 heads-ups, 0 timed out · HTTP 200",
+  "Day 12 +1h · follow-up run sent 0 email(s)"
+ ],
+ "rateLimitTrips": [
+  [
+   "+0ms GET Waitlist",
+   "+32ms GET Waitlist",
+   "+46ms GET Capacity",
+   "+178ms GET Waitlist",
+   "+178ms GET Waitlist",
+   "+196ms GET Waitlist"
+  ],
+  [
+   "+0ms GET Waitlist",
+   "+10ms GET Waitlist",
+   "+17ms GET Capacity",
+   "+314ms GET Waitlist",
+   "+325ms GET Waitlist",
+   "+333ms GET Capacity"
+  ],
+  [
+   "+0ms GET Capacity",
+   "+16ms GET Waitlist",
+   "+133ms GET Waitlist",
+   "+143ms GET Waitlist",
+   "+152ms GET Capacity",
+   "+260ms GET Waitlist"
+  ]
+ ],
+ "alerts": [
+  "[Waitlist automation] Intake: submission broken-1 is missing email, location, membership — check the T"
+ ]
+}

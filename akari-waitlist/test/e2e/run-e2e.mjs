@@ -2,88 +2,15 @@
 // and drives every lane through its webhooks.
 // Usage: NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n node test/e2e/run-e2e.mjs
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { acknowledge, buildErrorWorkflow, buildMain, webhook } from '../../build/build-workflow.mjs';
 import { typeformPayload } from '../fixtures.mjs';
-import { AIRTABLE_TOKEN, SENDGRID_KEY, createMockServices } from './mock-services.mjs';
+import { sleep, startStack, waitFor } from './stack.mjs';
 
-const NODE = process.env.NODE24 || process.execPath;
-const N8N = process.env.N8N_BIN;
-if (!N8N) throw new Error('Set N8N_BIN to the n8n CLI entry (node_modules/n8n/bin/n8n)');
-const PORT = 5678;
-const BASE = `http://localhost:${PORT}/webhook/akari-waitlist`;
-const WF_ID = 'akariWaitlistE2E1';
 const SECRET = 'e2e-secret-123';
-const home = mkdtempSync(join(process.env.E2E_TMP || tmpdir(), 'n8n-e2e-'));
-const env = {
-  ...process.env,
-  N8N_USER_FOLDER: home,
-  N8N_ENCRYPTION_KEY: 'e2e-test-key',
-  N8N_PORT: String(PORT),
-  N8N_LISTEN_ADDRESS: '127.0.0.1',
-  N8N_DIAGNOSTICS_ENABLED: 'false',
-  N8N_PERSONALIZATION_ENABLED: 'false',
-  N8N_VERSION_NOTIFICATIONS_ENABLED: 'false',
-  N8N_TEMPLATES_ENABLED: 'false',
-  GENERIC_TIMEZONE: 'America/New_York',
-  WEBHOOK_URL: `http://localhost:${PORT}/`,
-  NO_PROXY: 'localhost,127.0.0.1',
-  no_proxy: 'localhost,127.0.0.1',
-  N8N_LOG_LEVEL: 'warn',
-};
-
-// ── Workflow under test = the shipped JSON with test-only config swapped in ──
-const wf = buildMain();
-wf.id = WF_ID;
-const config = wf.nodes.find((n) => n.name === 'Config');
-const swaps = [
-  ["'appXXXXXXXXXXXXXX'", "'appE2ETEST000001'"],
-  ["'https://YOUR-N8N-HOST/webhook/akari-waitlist'", `'${BASE}'`],
-  ["'https://api.airtable.com/v0'", "'http://127.0.0.1:4010/v0'"],
-  ["'https://api.sendgrid.com/v3/mail/send'", "'http://127.0.0.1:4010/v3/mail/send'"],
-  ["sendNowSecret: 'CHANGE-ME'", `sendNowSecret: '${SECRET}'`],
-  ['sendWindow: { startHour: 8, endHour: 20 }', 'sendWindow: { startHour: 0, endHour: 24 }'],
-  ['sandboxMode: true', 'sandboxMode: false'],
-];
-for (const [from, to] of swaps) {
-  assert.ok(config.parameters.jsCode.includes(from), `Config is missing ${from}`);
-  config.parameters.jsCode = config.parameters.jsCode.replace(from, to);
-}
-// Test hooks: the (pending) Glofox webhook drives the engine; an extra webhook drives the report.
-for (const n of wf.nodes.filter((x) => x.name.includes('Glofox'))) delete n.disabled;
-wf.nodes.push(webhook('TEST: Report', [0, 1400], 'POST', 'akari-waitlist/test-report', 'responseNode'));
-wf.nodes.push(acknowledge('TEST: Acknowledge Report', [200, 1400]));
-wf.connections['TEST: Report'] = { main: [[{ node: 'TEST: Acknowledge Report', type: 'main', index: 0 }]] };
-wf.connections['TEST: Acknowledge Report'] = { main: [[{ node: 'Route: Report', type: 'main', index: 0 }]] };
-
-// Error-alert workflow, wired in as the main workflow's error workflow.
-const errWf = buildErrorWorkflow();
-errWf.id = 'akariWaitlistErr1';
-const alertSend = errWf.nodes.find((n) => n.name === 'Send Alert (SendGrid)');
-alertSend.parameters.url = 'http://127.0.0.1:4010/v3/mail/send';
-wf.settings.errorWorkflow = errWf.id;
-
-writeFileSync(join(home, 'workflow.json'), JSON.stringify(wf));
-writeFileSync(join(home, 'error-workflow.json'), JSON.stringify(errWf));
-writeFileSync(join(home, 'credentials.json'), JSON.stringify([
-  { id: 'akariAirtablePAT', name: 'Airtable PAT (Akari)', type: 'httpHeaderAuth', data: { name: 'Authorization', value: `Bearer ${AIRTABLE_TOKEN}` } },
-  { id: 'akariSendGridKey', name: 'SendGrid API Key (Akari)', type: 'httpHeaderAuth', data: { name: 'Authorization', value: `Bearer ${SENDGRID_KEY}` } },
-]));
-
-const cli = (...args) => execFileSync(NODE, [N8N, ...args], { env, stdio: 'pipe', encoding: 'utf8' });
-console.log('• importing credentials + workflow into n8n', cli('--version').trim());
-cli('import:credentials', `--input=${join(home, 'credentials.json')}`);
-cli('import:workflow', `--input=${join(home, 'error-workflow.json')}`);
-cli('import:workflow', `--input=${join(home, 'workflow.json')}`);
-cli('publish:workflow', `--id=${WF_ID}`);
-cli('publish:workflow', `--id=${errWf.id}`); // n8n 2.x only runs error workflows that are published
+const stack = await startStack({ secret: SECRET });
+const { BASE, mock, post, form } = stack;
+console.log('• importing credentials + workflow into n8n', stack.version);
 
 // ── Mock services + seed data ─────────────────────────────────
-const mock = createMockServices();
-await mock.listen(4010);
 const HOUR = 3600000;
 const ago = (days) => new Date(Date.now() - days * 24 * HOUR).toISOString();
 const SIGNUP = (slug) => `https://app.glofox.test/signup/${slug}`;
@@ -106,24 +33,6 @@ const [alex, blair, casey, dana, alexDaytime] = mock.seed('Waitlist', [
 const bulk = mock.seed('Waitlist', Array.from({ length: 250 }, (_, i) => person(`Bulk${String(i).padStart(3, '0')}`, { Location: 'Greenpoint', Membership: 'Daytime', 'Joined At': ago(1 + i) })));
 const oldestBulk = bulk.slice(-10).map((r) => r.id).sort();
 
-// ── Start n8n ─────────────────────────────────────────────────
-const n8n = spawn(NODE, [N8N, 'start'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-let n8nLog = '';
-n8n.stdout.on('data', (d) => { n8nLog += d; });
-n8n.stderr.on('data', (d) => { n8nLog += d; });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(fn, label, ms = 30000) {
-  const end = Date.now() + ms;
-  for (;;) {
-    try {
-      const v = await fn();
-      if (v) return v;
-    } catch { /* retry */ }
-    if (Date.now() > end) throw new Error(`Timed out waiting for: ${label}`);
-    await sleep(250);
-  }
-}
-
 const results = [];
 async function step(name, fn) {
   await sleep(1200); // keep executions from overlapping so rate-limit checks measure a single execution
@@ -141,12 +50,9 @@ const get = (id) => mock.table('Waitlist').find((r) => r.id === id);
 const logs = (event) => mock.table('Activity Log').filter((r) => r.fields.Event === event);
 const emailsTo = (addr) => mock.state.emails.filter((m) => m.personalizations[0].to.some((t) => t.email === addr));
 const tokenOf = (id) => get(id).fields['Invite Token'];
-const post = (path, body) => fetch(`${BASE}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const form = (fields) => fetch(`${BASE}/respond-confirm`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields).toString() });
 
 try {
-  await waitFor(async () => (await fetch(`http://localhost:${PORT}/healthz`)).ok, 'n8n /healthz', 120000);
-  await waitFor(async () => (await fetch(`${BASE}/respond?t=x&a=yes`)).status === 410, 'production webhooks registered', 60000);
+  await stack.ready();
   console.log('• n8n is up with the workflow published\n');
 
   await step('Intake: Typeform submission → one row per location × membership, logged', async () => {
@@ -211,7 +117,7 @@ try {
     const html = await r.text();
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-type'), /text\/html/);
-    assert.match(html, /action="http:\/\/localhost:5678\/webhook\/akari-waitlist\/respond-confirm"/);
+    assert.ok(html.includes(`action="${BASE}/respond-confirm"`), 'confirmation form posts to the respond-confirm webhook');
     assert.equal(get(alex.id).fields.Status, 'Invited');
   });
 
@@ -309,13 +215,12 @@ try {
   results.push(['FAIL', 'harness', 0, e.message]);
   console.log(`✗ ${e.message}`);
 } finally {
-  n8n.kill('SIGTERM');
-  await mock.close();
+  await stack.stop();
 }
 
 const failed = results.filter((r) => r[0] === 'FAIL');
 console.log(`\n${results.length - failed.length}/${results.length} end-to-end checks passed · ${mock.state.requests.length} API calls · ${mock.state.emails.length} emails`);
 if (failed.length) {
-  console.log('\n--- n8n log (tail) ---\n', n8nLog.split('\n').slice(-60).join('\n'));
+  console.log('\n--- n8n log (tail) ---\n', stack.log().split('\n').slice(-60).join('\n'));
   process.exitCode = 1;
 }

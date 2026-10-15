@@ -5,9 +5,11 @@ import { createServer } from 'node:http';
 export const AIRTABLE_TOKEN = 'patTEST.akari';
 export const SENDGRID_KEY = 'SG.test-key';
 
-export function createMockServices({ pageSize = 100 } = {}) {
-  const state = { tables: {}, emails: [], requests: [], rateViolations: 0, violations: [], errors: [] };
+// lockoutMs: real Airtable rejects every request for 30s after a rate-limit hit; 0 = reject only the excess.
+export function createMockServices({ pageSize = 100, lockoutMs = 0 } = {}) {
+  const state = { tables: {}, emails: [], requests: [], rateViolations: 0, violations: [], errors: [], lockedRequests: 0, lastRefusalAt: 0 };
   const hits = [];
+  let lockedUntil = 0;
   const table = (name) => (state.tables[name] ||= []);
   const rid = () => `rec${Array.from({ length: 14 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 62)]).join('')}`;
 
@@ -48,11 +50,18 @@ export function createMockServices({ pageSize = 100 } = {}) {
   async function airtable(req, res, url, body) {
     if (req.headers.authorization !== `Bearer ${AIRTABLE_TOKEN}`) return send(res, 401, { error: { type: 'AUTHENTICATION_REQUIRED' } });
     const now = Date.now();
+    if (now < lockedUntil) {
+      state.lockedRequests++;
+      state.lastRefusalAt = now;
+      return send(res, 429, { errors: [{ error: 'RATE_LIMIT_REACHED' }] });
+    }
     hits.push({ at: now, what: `${req.method} ${decodeURIComponent(url.pathname.split('/')[3] || '')}` });
     while (hits.length && now - hits[0].at > 1000) hits.shift();
     if (hits.length > 5) {
       state.rateViolations++;
       state.violations.push(hits.map((h) => `+${h.at - hits[0].at}ms ${h.what}`));
+      if (lockoutMs) lockedUntil = now + lockoutMs;
+      state.lastRefusalAt = now;
       return send(res, 429, { errors: [{ error: 'RATE_LIMIT_REACHED' }] });
     }
     const [, , , tableName, recordId] = url.pathname.split('/').map(decodeURIComponent);

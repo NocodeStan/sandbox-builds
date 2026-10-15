@@ -5,6 +5,7 @@
 const rec = $('Get Entry for Send Now').first().json;
 const reply = (status, title, body, actions = []) => [{ json: { status, page: htmlPage(title, body), actions } }];
 
+if (rec && Array.isArray(rec.errors)) return reply(503, 'Airtable is busy', '<p>Airtable is briefly limiting requests. Nothing was sent — wait a minute and press the button again.</p>');
 if (!rec || !rec.id || !rec.fields) return reply(404, 'Entry not found', '<p>That waitlist entry could not be found. It may have been deleted.</p>');
 const e = normEntry(rec);
 if (!e.email) return reply(422, 'No email address', `<p>${esc(e.name || e.id)} has no email address, so nothing was sent.</p>`);

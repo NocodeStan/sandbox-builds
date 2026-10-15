@@ -170,7 +170,7 @@ const TESTS = [
     pre:'Same queue as T4, with at least 3 more Waiting people behind the one just invited.',
     steps:[ 'Run the engine again (or use the same run as T4).' ],
     expectA:[ 'The next people in that queue (up to 10 total, minus the one already invited) → <code>Status = Primed</code>, <code>Primed At</code> set.' ],
-    expectB:{ node:'Build Emails', text:'one heads-up email per primed person, subject starting "You’re nearly at the front".' } },
+    expectB:{ node:'Build Emails', text:'one heads-up email per primed person, subject starting "You’re Almost Up for".' } },
   { id:'T12', lane:'engine', prio:'P0', title:'A missed 24h window releases the spot',
     pre:'An Invited row from T4.',
     steps:[ 'In Airtable, set that row’s <code>Invite Expires At</code> to a time in the past (e.g. yesterday).', 'Run the engine again.' ],
@@ -221,7 +221,7 @@ const TESTS = [
     expectB:{ node:'Build Emails', text:'the Send Now invite email, same shape as an engine-triggered one.' } },
   { id:'T17', lane:'report', prio:'P2', title:'Daily report content is correct',
     pre:'Run T1–T13 first so the report has something to summarise.',
-    steps:[ 'In n8n, execute the workflow starting from <b>Daily Report 7pm</b>.', 'Open that execution → <b>Build Daily Report</b> → Output tab.' ],
+    steps:[ 'In n8n, execute the workflow starting from <b>Daily Report 7:30am</b>.', 'Open that execution → <b>Build Daily Report</b> → Output tab.' ],
     expectA:[ 'The HTML has the last-24h counts, a queue table, a conversion-by-location table, and lists your T11 reasons under "Reasons given".' ],
     expectB:{ node:'Send Report (SendGrid)', text:'the same email actually lands in the teamEmails inboxes.' } },
 ];

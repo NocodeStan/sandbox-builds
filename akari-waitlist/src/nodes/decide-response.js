@@ -8,6 +8,18 @@ const note = String(req.reason || '').trim().slice(0, 1000);
 const rec = recordsOf('Find Entry by Token (commit)')[0];
 const reply = (status, title, body, actions = []) => [{ json: { status, page: htmlPage(title, body), actions } }];
 
+// A lookup refused by Airtable (usually its 30s lockout after a burst of replies): change nothing and
+// resend the exact same answer — automatically after a random 35–55s (so everyone caught in the same
+// burst doesn't retry in the same second and trip the lockout again), or now via the button.
+if (['Find Entry by Token (commit)', 'Find Entries by Email', 'Find Queue Settings'].some((n) => $(n).all().some((i) => i.json.error))) {
+  return reply(503, 'Please try again in a minute', `<p>Lots of people are replying right now and we couldn't save your answer yet. Nothing has changed — if your spot was being held, it still is.</p>
+<p class="muted" id="auto">We'll try again automatically in about a minute. Please keep this page open.</p>
+<form id="retry" method="POST" action="${esc(CFG.publicWebhookBase)}/respond-confirm" onsubmit="this.querySelector('button').disabled=true">
+<input type="hidden" name="t" value="${esc(token)}"><input type="hidden" name="a" value="${esc(action)}"><input type="hidden" name="reason" value="${esc(note)}">
+<button type="submit">Try again</button></form>
+<script>setTimeout(function(){var f=document.getElementById('retry');f.querySelector('button').disabled=true;f.submit();},35000+Math.floor(Math.random()*20000));</script>`);
+}
+
 if (!rec || token.length < 16 || rec.fields['Invite Token'] !== token) {
   return reply(410, 'This link has expired', '<p>This link is no longer active — it may have been replaced by a newer email from us.</p><p class="muted">Please use the most recent email, or reply to it and we\'ll help.</p>');
 }
@@ -20,6 +32,8 @@ const settings = recordsOf('Find Queue Settings')[0];
 const signupUrl = (settings && settings.fields['Signup URL']) || '';
 const q = `${e.membership} membership at ${e.location}`;
 const onTime = (e.status === 'Invited' && e.expiresAt && NOW <= e.expiresAt) || e.status === 'Tour Requested';
+// They already answered "not ready" / "no longer interested" on this invite, which released the spot.
+const declined = ['Not Right Now', 'No Longer Interested'].includes(e.status);
 const nowIso = NOW.toISOString();
 const acts = [];
 const update = (entry, fields, email, log) => acts.push({ recordId: entry.id, fields, email, log });
@@ -67,26 +81,27 @@ function tourAlert(late) {
   const signupDate = fmtTime(e.joinedAt);
   // Tour Requested holds never expire on their own once set (unlike a plain Invited hold) — say so
   // plainly rather than echoing the original 24h deadline, which no longer applies once held this way.
-  const holdUntil = late ? 'Not held — the original window passed before they replied' : 'No deadline — held until your team follows up';
+  const why = declined ? 'they had already told us they weren\'t ready' : 'they replied after their original hold expired';
+  const holdUntil = late ? `Not held — ${why}` : 'No deadline — held until your team follows up';
   const html = emailLayout(`
 <p>Hi team,</p>
-<p><strong>${esc(e.name || e.email)}</strong> would like to tour Akari ${esc(e.location)} before committing to a ${esc(e.membership)} membership. Their details are below:</p>
+<p><strong>${esc(e.name || e.email)}</strong> would like to tour Akari ${esc(e.location)} before committing to ${article(e.membership)} ${esc(e.membership)} membership. Their details are below:</p>
 <p>Email: ${esc(e.email)}<br>Phone: ${esc(e.phone || '—')}<br>On the waitlist since: ${esc(signupDate)}<br>Spot held until: ${esc(holdUntil)}${note ? `<br>Preferred times: ${esc(note)}` : ''}</p>
 <p>Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.</p>
 <p>${late
-    ? 'Because they replied after their original hold expired, the spot was <strong>not</strong> held for them — they\'re now first in line (Warm) for the next opening.'
+    ? `Because ${why}, the spot was <strong>not</strong> held for them — they're now first in line (Warm) for the next opening.`
     : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}</p>
 <p>If they decide to join${late ? '' : ' after the tour'}, press <strong>Send Now</strong> on their row in Airtable — that sends them a fresh invite with their private sign up link.</p>
 <p>Thank you,<br>Akari team</p>`, 'Please reach out within 1 business day to schedule');
   const text = `Hi team,
 
-${e.name || e.email} would like to tour Akari ${e.location} before committing to a ${e.membership} membership. Their details are below:
+${e.name || e.email} would like to tour Akari ${e.location} before committing to ${article(e.membership)} ${e.membership} membership. Their details are below:
 Email: ${e.email} | Phone: ${e.phone || '-'} | On the waitlist since: ${signupDate} | Spot held until: ${holdUntil}${note ? ` | Preferred times: ${note}` : ''}
 
 Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.
 
 ${late
-    ? 'Because they replied after their original hold expired, the spot was NOT held for them — they\'re now first in line (Warm) for the next opening.'
+    ? `Because ${why}, the spot was NOT held for them — they're now first in line (Warm) for the next opening.`
     : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}
 
 If they decide to join${late ? '' : ' after the tour'}, press Send Now on their row in Airtable — that sends them a fresh invite with their private sign up link.
@@ -99,7 +114,10 @@ Akari team`;
 switch (action) {
   case 'yes': {
     if (!onTime) {
-      update(e, { Status: 'Warm', 'Response At': nowIso }, null, logRow(e, 'Late Reply', { Detail: 'Tried to claim after the hold expired → Warm (first in line next time)' }));
+      update(e, { Status: 'Warm', 'Response At': nowIso }, null, logRow(e, 'Late Reply', {
+        Detail: declined ? `Changed their mind after answering "${e.status}" → Warm (first in line next time)` : 'Tried to claim after the hold expired → Warm (first in line next time)',
+      }));
+      if (declined) return reply(200, 'You\'re back in line', `<p>Thanks for letting us know! Because you'd told us you weren't ready, we released your ${esc(q)} spot to the next person.</p><p>The good news: you're now <strong>first in line</strong> for the next spot, and we'll email you as soon as it opens.</p>`, acts);
       return reply(200, 'Your hold has lapsed', `<p>Your ${CFG.holdHours}-hour hold on the ${esc(q)} passed before we heard back, so it has gone to the next person.</p><p>The good news: you're now <strong>first in line</strong> for the next spot, and we'll email you as soon as it opens.</p>`, acts);
     }
     const unlimited = /unlimited/i.test(e.membership);
@@ -119,8 +137,9 @@ switch (action) {
       update(e, { Status: 'Tour Requested', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(false), logRow(e, 'Tour Requested', { Reason: note }));
       return reply(200, 'Tour requested', `<p>Thanks — we'll be in touch to arrange your tour. Your ${esc(q)} spot is held for you in the meantime.</p>`, acts);
     }
-    update(e, { Status: 'Warm', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(true), logRow(e, 'Late Reply', { Reason: note, Detail: 'Asked for a tour after the hold expired → Warm' }));
-    return reply(200, 'Thanks — we\'ll be in touch', `<p>Your hold on the ${esc(q)} passed before we heard back, so it has gone to the next person. You're now <strong>first in line</strong> for the next spot, and our team will reach out about a tour.</p>`, acts);
+    update(e, { Status: 'Warm', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(true), logRow(e, 'Late Reply', { Reason: note, Detail: declined ? `Asked for a tour after answering "${e.status}" → Warm` : 'Asked for a tour after the hold expired → Warm' }));
+    const lead = declined ? `Because you'd told us you weren't ready, your ${esc(q)} spot went to the next person.` : `Your hold on the ${esc(q)} passed before we heard back, so it has gone to the next person.`;
+    return reply(200, 'Thanks — we\'ll be in touch', `<p>${lead} You're now <strong>first in line</strong> for the next spot, and our team will reach out about a tour.</p>`, acts);
   }
   case 'notnow':
     update(e, { Status: 'Not Right Now', 'Response At': nowIso, Reason: note }, null, logRow(e, 'Not Right Now', { Reason: note }));

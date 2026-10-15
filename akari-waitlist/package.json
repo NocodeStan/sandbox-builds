@@ -8,7 +8,8 @@
     "build": "node build/build-workflow.mjs",
     "test": "node --test test/*.test.mjs",
     "e2e": "node test/e2e/run-e2e.mjs",
-    "simulate": "node simulation/run-simulation.mjs"
+    "simulate": "node simulation/run-simulation.mjs",
+    "uat": "node test/uat/run-uat.mjs"
   },
   "engines": {
     "node": ">=20"

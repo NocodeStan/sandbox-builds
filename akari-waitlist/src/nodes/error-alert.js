@@ -17,10 +17,15 @@ const lines = [
   ['Mode', ex.mode || '—'],
   ['Execution', ex.url || ex.id || '—'],
 ];
-const html = `<p><strong>The Akari waitlist automation hit an error.</strong></p>
+// Airtable's 30s rate-limit lockout is temporary: say so, so a one-off doesn't read as an outage.
+const rateLimited = /too many requests|429|rate.?limit/i.test(`${err.message} ${err.description || ''}`);
+const advice = rateLimited
+  ? 'This was Airtable\'s temporary rate limit (several things happened at once). Nothing was half-saved: the hourly engine simply runs again next hour, and candidates were asked to try again. No action needed unless you see this repeatedly.'
+  : 'Open the execution in n8n to see the input data, fix the cause, and retry it if needed.';
+const html = `<p><strong>The Akari waitlist automation hit ${rateLimited ? 'a temporary Airtable rate limit' : 'an error'}.</strong></p>
 <table cellpadding="4">${lines.map(([k, v]) => `<tr><td style="color:#666">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
-<p>Open the execution in n8n to see the input data, fix the cause, and retry it if needed.</p>`;
-const text = lines.map(([k, v]) => `${k}: ${v}`).join('\n');
+<p>${esc(advice)}</p>`;
+const text = [...lines.map(([k, v]) => `${k}: ${v}`), '', advice].join('\n');
 
 return [{
   json: {

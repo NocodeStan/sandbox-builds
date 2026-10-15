@@ -8,6 +8,10 @@ const action = String(query.a || '');
 const rec = recordsOf('Find Entry by Token (view)')[0];
 const reply = (status, title, body) => [{ json: { status, page: htmlPage(title, body), actions: [] } }];
 
+if ($('Find Entry by Token (view)').all().some((i) => i.json.error)) {
+  return reply(503, 'Please try again in a minute', '<p>Lots of people are replying right now. Nothing has changed — please refresh this page in a minute.</p>');
+}
+
 if (!rec || token.length < 16 || rec.fields['Invite Token'] !== token) {
   return reply(410, 'This link has expired', '<p>This link is no longer active — it may have been replaced by a newer email from us.</p><p class="muted">Please use the most recent email, or reply to it and we\'ll help.</p>');
 }
@@ -28,6 +32,7 @@ let note = '';
 const lapsed = (e.status === 'Invited' && e.expiresAt && NOW > e.expiresAt) || ['Warm', 'No Reply'].includes(e.status);
 if (e.status === 'Signed Up' && action !== 'leave') note = 'You have already claimed this spot.';
 else if (e.status === 'Removed') note = 'You are no longer on this waitlist.';
+else if (['Not Right Now', 'No Longer Interested'].includes(e.status) && (action === 'yes' || action === 'tour')) note = 'You\'ve already told us you weren\'t ready, so this spot was released. If you continue, you\'ll be first in line for the next one.';
 else if (lapsed && (action === 'yes' || action === 'tour')) note = `Your ${CFG.holdHours}-hour hold has passed. If you continue, you'll be first in line for the next spot.`;
 else if (e.status === 'Invited' && e.expiresAt) note = `Your spot is held until ${esc(fmtTime(e.expiresAt))}.`;
 
@@ -35,7 +40,7 @@ const field = c.field
   ? `<label for="reason">${esc(c.field[0])}</label><textarea id="reason" name="reason" maxlength="1000" placeholder="${esc(c.field[1])}"></textarea>`
   : '';
 const body = `<p>${c.lead}</p>${note ? `<p class="note">${note}</p>` : ''}
-<form method="POST" action="${esc(CFG.publicWebhookBase)}/respond-confirm">
+<form method="POST" action="${esc(CFG.publicWebhookBase)}/respond-confirm" onsubmit="this.querySelector('button').disabled=true">
 <input type="hidden" name="t" value="${esc(token)}"><input type="hidden" name="a" value="${esc(action)}">
 ${field}<button type="submit">${esc(c.button)}</button></form>`;
 return reply(200, c.title, body);

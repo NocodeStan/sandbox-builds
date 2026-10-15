@@ -144,7 +144,35 @@ test('someone near the front of two queues gets one combined heads-up email', ()
   const primed = of(plan(caps, [a, b]), 'Primed');
   assert.equal(primed.length, 2);
   assert.equal(primed.filter((p) => p.email).length, 1);
-  assert.match(primed.find((p) => p.email).email.text, /Unlimited at Williamsburg, Daytime at Williamsburg/);
+  const m = primed.find((p) => p.email).email;
+  assert.match(m.text, /the Unlimited membership at Akari Williamsburg and the Daytime membership at Akari Williamsburg/);
+  assert.equal(m.subject, "You're Almost Up for a Membership at Akari Williamsburg");
+});
+
+test('heads-up follows Jack\'s copy: subject with the right article, real hold length, reply to leave', () => {
+  const m = of(plan([capacity()], [entry({})]), 'Primed')[0].email;
+  assert.equal(m.subject, "You're Almost Up for an Unlimited Membership at Akari Williamsburg");
+  assert.match(m.text, /you'll have 24 hours to claim your spot/);
+  assert.match(m.text, /just reply to this email and we'll remove you/);
+  assert.match(m.text, /Warmly,\nAkari team$/);
+  assert.match(m.html, /A spot could open up any day now/);
+});
+
+test('someone invited on one queue gets no heads-up for another queue in the same run', () => {
+  const email = 'both@example.com';
+  const heads = entry({ Email: email, Membership: 'Unlimited', 'Joined At': daysAgo(40) });
+  const invitee = entry({ Email: email, Membership: 'Daytime', 'Joined At': daysAgo(40) });
+  const caps = [capacity(), capacity({ Membership: 'Daytime', 'Minimum Members': 11 })];
+  const out = plan(caps, [heads, invitee]);
+  assert.deepEqual(of(out, 'Invited').map((a) => a.recordId), [invitee.id]);
+  assert.equal(of(out, 'Primed').length, 0);
+});
+
+test('a Warm person who replied before the hold ran out (changed their mind) has no cool-down', () => {
+  const changed = entry({ Status: 'Warm', 'Invite Expires At': hoursFromNow(5), 'Response At': hoursAgo(1), 'Joined At': daysAgo(1) });
+  const other = entry({ 'Joined At': daysAgo(90) });
+  const out = plan([capacity({ 'Minimum Members': 11 })], [other, changed]);
+  assert.deepEqual(of(out, 'Invited').map((a) => a.recordId), [changed.id]);
 });
 
 test('already-primed and warm people are not primed again', () => {

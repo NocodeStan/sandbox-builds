@@ -5,7 +5,8 @@ const live = recordsOf('Get Queue Snapshot').map(normEntry);
 const caps = recordsOf('Get Capacity (report)').map((r) => r.fields || {});
 const within = (f, ms) => f.Timestamp && NOW - new Date(f.Timestamp) <= ms;
 const today = logs.filter((f) => within(f, DAY));
-const count = (list, event, source) => list.filter((f) => f.Event === event && (!source || f.Source === source)).length;
+// One per waitlist entry, so a double-click or repeated event can't inflate the numbers.
+const count = (list, event, source) => new Set(list.filter((f) => f.Event === event && (!source || f.Source === source)).map((f, i) => f['Entry ID'] || `row${i}`)).size;
 const cell = 'padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;text-align:left';
 const table = (head, rows) => `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:8px 0 20px">
 <tr>${head.map((h) => `<th style="${cell};color:#8a7f72;font-weight:normal">${esc(h)}</th>`).join('')}</tr>

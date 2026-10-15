@@ -29,10 +29,12 @@ function inviteEmail(e, token, expires) {
   const costLine = price
     ? `The cost for your membership will be $${price}/month, and additional membership details can be found on our membership page here ${CFG.membershipPageUrl}.`
     : `Additional membership details, including pricing, can be found on our membership page here ${CFG.membershipPageUrl}.`;
+  const pageLink = `<a href="${esc(CFG.membershipPageUrl)}" style="color:#1f1d1a">${esc(CFG.membershipPageUrl)}</a>`;
+  const costHtml = esc(costLine).replace(esc(CFG.membershipPageUrl), pageLink);
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
 <p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at Akari ${esc(e.location)}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
-<p>${esc(costLine)} We'll hold it for you until <strong>${esc(until)}</strong>. After that it goes to the next person in line.</p>
+<p>${costHtml} We'll hold it for you until <strong>${esc(until)}</strong>. After that it goes to the next person in line.</p>
 <p>Please let us know how you would like to proceed below:</p>
 ${btn(respondLink(token, 'yes'), 'Sign up', true)}
 ${btn(respondLink(token, 'tour'), 'Tour first')}

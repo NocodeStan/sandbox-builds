@@ -45,7 +45,7 @@ Source of truth: Eraser board **Waitlist Automation_1.0** (11 Sep call notes + a
 | **Notes** Late reply goes to Warm, no penalty | Decide Response |
 | **Step 7** Unlimited → removed from other queues automatically; lower tier → asked whether to stay | Decide Response (+ one-click "remove me" link) |
 | **Diagram** No-reply bucket, to be re-engaged by a campaign | Second missed window → `No Reply` status |
-| **Step 8** Daily email: invited, signed up, not now, no longer interested (with reasons), conversion by location | Lane 5 · Daily report (19:00) |
+| **Step 8** Daily email: invited, signed up, not now, no longer interested (with reasons), conversion by location | Lane 5 · Daily report (07:30) |
 | **Out of scope** Keep-warm nurture sequence, SMS, live Glofox sync | Not built. SMS can be added later on the same executor. |
 
 ## 2. Decisions to confirm with the client
@@ -75,7 +75,7 @@ flowchart LR
   CRON[Every hour] --> EN[2 · Engine]
   EML[Candidate clicks email button] -->|GET → confirm page → POST| RS[3 · Response]
   AT[Airtable 'Send Now' button] --> SN[4 · Send Now]
-  RPT[19:00 daily] --> RP[5 · Report]
+  RPT[07:30 daily] --> RP[5 · Report]
   IN --> A[(Airtable)]
   EN --> X[Executor]
   RS --> X
@@ -190,7 +190,7 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 | Candidate Opens Link | Webhook GET `/respond` | Email button clicked → confirmation page. |
 | Candidate Confirms | Webhook POST `/respond-confirm` | Button on the confirmation page → the actual change. |
 | Airtable: Send Now Button | Webhook GET `/send-now?id=&k=` | Staff override. |
-| Daily Report 7pm | Schedule `0 19 * * *` | Daily summary. |
+| Daily Report 7:30am | Schedule `30 7 * * *` | Daily summary, before doors open. |
 | Route: Intake / Engine / Response View / Response Commit / Send Now / Report | Set | Tags the item with its lane. |
 | **Config** | Code | **The only node to edit.** All settings, URLs and business-rule numbers. |
 | Route | Switch | Sends each item to its lane. |
@@ -262,9 +262,11 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 
 **Stage 0 · Automated (no accounts needed)**
 ```bash
-npm test          # 46 business-rule tests
+npm test          # 63 business-rule tests
 # End-to-end in a real n8n (needs Node 24 + an n8n install):
 NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run e2e
+# Client UAT: "a week at Akari" from Jack's seat, ~15 min (see §13)
+NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 ```
 
 **Stage 1 · Sandbox base, no email delivery.** Use a copy of the Airtable base, with `sandboxMode: true`. Run T1–T17 and check Airtable plus n8n's **Executions** list. SendGrid validates every payload but delivers nothing.
@@ -291,7 +293,7 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run e2e
 | T14 | Send Now | Airtable button on anyone (also try a wrong `k`) | Invite sent even when the queue is full; wrong key → 403 |
 | T15 | Prioritise New Only | Tick it with an Existing member at the front | Existing member skipped |
 | T16 | Manual reorder | Set `Manual Rank = 1` on someone new | Invited first |
-| T17 | Daily report | Execute from **Daily Report 7pm** | Email with counts, conversion by location, queue table |
+| T17 | Daily report | Execute from **Daily Report 7:30am** | Email with counts, conversion by location, queue table |
 
 *Emails link to production webhook URLs, so the workflow must be published to test T6–T14. Manual editor runs don't trigger the error workflow; test T3 against the published workflow.*
 
@@ -318,15 +320,16 @@ Date-time fields: time zone America/New_York.
 - **Not Right Now**: follow up by hand; press Send Now when they're ready.
 - **Reorder**: type a number in `Manual Rank` (1 = next). Clear it to go back to the rules.
 - **Pause everything**: set `engineEnabled: false` in Config. Links and Send Now keep working.
-- **Error email arrives**: open the execution link, fix the cause, and retry it. If an engine run failed part-way, look for rows with `Status = Invited` from that run that have no matching `Invited` row in Activity Log, and press Send Now on them.
+- **"Temporary Airtable rate limit" email**: no action. Several things hit Airtable in the same second; it locks the base for 30s. Candidates were shown "try again in a minute" (their page retries by itself), saves wait the lockout out, and the hourly engine runs again next hour. Act only if it repeats every hour.
+- **Any other error email**: open the execution link, fix the cause, and retry it. If an engine run failed part-way, look for rows with `Status = Invited` from that run that have no matching `Invited` row in Activity Log, and press Send Now on them.
 
 ## 10. Limits and risks
 
 | Risk | Mitigation in v1 | If it grows |
 |---|---|---|
-| Airtable allows **5 requests/second per base**. Two lanes firing at the same instant can still exceed it. | Background work paced at ≤2/s, writes batched 10 rows per request, 1s gap before writes, up to 4 attempts 5s apart, error alert. | Move state to Postgres or n8n Data Tables and keep Airtable as the admin view. |
+| Airtable allows **5 requests/second per base** and then **locks the base for 30s** — longer than n8n's retry settings can wait (max 5 tries × 5s). A burst of replies, or replies landing as the hourly run starts, trips it (reproduced in UAT R7/X1). | Writes paced ≤2/s, 10 rows per request. Refused write batches wait 35s and are resent (only those, up to 4 attempts), so nothing shown to a candidate as done goes unsaved. Refused candidate lookups show "try again in a minute", which retries itself after a random 35–55s. The engine fails loudly and reruns next hour; its alert says no action is needed. | Self-hosted: `N8N_CONCURRENCY_PRODUCTION_LIMIT=1` serialises executions and removes the collisions entirely. Longer term: state in Postgres / n8n Data Tables, Airtable as the admin view. |
 | **n8n execution quota**: the hourly engine alone is ~720 runs/month, plus 1 per signup and 2 per response. | — | Check the plan. Every 2 hours halves it at the cost of slower chain advance. |
-| **Deliverability**: an invite in spam burns a 24h hold. | Heads-up email asks people to add the sender to their contacts. | Domain authentication is a go-live gate (§7). |
+| **Deliverability**: an invite in spam burns a 24h hold. | The heads-up email warns people an invite is coming. | Domain authentication is a go-live gate (§7). |
 | "Signed Up" ≠ paid. | Staff recount resets the maths. | Glofox payment or member webhook, once confirmed. |
 | Send Now secret lives in the Airtable button URL. | Internal base only; Send Now is refused while the secret is still the default. | Rotate the secret when staff change. |
 | Typeform label changes. | Parser matches by keywords; bad submissions alert instead of vanishing. | — |
@@ -344,3 +347,10 @@ MODE=live AIRTABLE_TOKEN=pat... AIRTABLE_BASE_ID=app... npm run simulate
 ```
 
 Writes a dated log to `simulation/log-<timestamp>.md`. In `live` mode it creates real Waitlist rows (tagged `Entry Source = Simulation`, safe to filter or delete whenever) and temporarily reconfigures the Williamsburg · Unlimited Capacity row — reset `Minimum Members` / `Active Members` / `Enabled` there before relying on that queue for anything real. No SendGrid credential is used or required: every email that would have sent is logged (subject + recipient) instead.
+
+## 13. Client UAT (`npm run uat`)
+
+`test/uat/run-uat.mjs` runs "a week at Akari" from the client's seat through the shipped workflow in a real n8n, against mock Airtable and SendGrid. The mock is strict: 5 requests/second, 30s lockout, 10-row batches, real formulas. The run covers 10 Typeform variants, the hourly engine, every candidate response (including scanners, double-clicks, bursts, late and changed-mind replies), staff actions (Send Now, recounts, manual rank), time travel across 12 days, two daily reports, a copy review of every email against Jack's approved templates, and whole-run data-integrity checks.
+
+Each check reads as what Jack expects. Results: ✅ pass · ❌ fail (defect) · ⚠️ risk (works, residual risk) · ❓ open (needs a product decision). The report, including the full inbox and final Airtable state, is written to `test/uat/reports/uat-<label>.md`.
+

@@ -1,9 +1,11 @@
 // @include core
 const p = $('Parse Typeform').first().json;
+// A signup in the last 60 days (the window the engine still counts) means they hold that membership now.
+const recentSignup = (e) => e.status === 'Signed Up' && (!e.responseAt || NOW - e.responseAt < 60 * DAY);
 const already = new Set(
   recordsOf('Find Existing Entries')
     .map(normEntry)
-    .filter((e) => ACTIVE_STATUSES.includes(e.status))
+    .filter((e) => ACTIVE_STATUSES.includes(e.status) || recentSignup(e))
     .map((e) => `${e.location}|${e.membership}`),
 );
 

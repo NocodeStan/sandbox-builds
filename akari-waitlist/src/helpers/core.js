@@ -8,6 +8,7 @@ const DAY = 86400000;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const toDate = (v) => (v ? new Date(v) : null);
 const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || 'there';
+const article = (word) => (/^[aeiou]/i.test(String(word || '')) ? 'an' : 'a');
 const recordsOf = (nodeName) => $(nodeName).all().flatMap((i) => i.json.records || []);
 const fmtTime = (d) =>
   new Date(d).toLocaleString('en-US', {

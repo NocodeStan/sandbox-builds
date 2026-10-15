@@ -55,6 +55,19 @@ test('Yes after the hold expired → Warm (first in line next time), no email', 
   assert.match(r.page, /first in line/);
 });
 
+test('"Not ready yet" then "Sign up" on the same invite → back in line, told so accurately (not "hold lapsed")', () => {
+  for (const status of ['Not Right Now', 'No Longer Interested']) {
+    const r = decide(invited({ Status: status }), 'yes');
+    assert.equal(r.actions[0].fields.Status, 'Warm');
+    assert.ok(r.actions[0].fields['Response At']);
+    assert.match(r.page, /told us you weren't ready[\s\S]*first in line/);
+    assert.doesNotMatch(r.page, /passed before we heard back/);
+    assert.match(r.actions[0].log.Detail, /Changed their mind/);
+  }
+  const t = decide(invited({ Status: 'Not Right Now' }), 'tour').actions[0];
+  assert.match(t.email.text, /they had already told us they weren't ready/);
+});
+
 test('Yes after already timing out (status Warm) is also a late reply', () => {
   const r = decide(invited({ Status: 'Warm', 'Invite Expires At': hoursAgo(5) }), 'yes');
   assert.equal(r.actions[0].fields.Status, 'Warm');
@@ -69,6 +82,7 @@ test('Tour within the hold → Tour Requested (spot stays held), team alerted wi
   assert.deepEqual(a.email.to, ['team@akari.test']);
   assert.match(a.email.text, /Saturday morning/);
   assert.match(a.email.text, /Send Now/);
+  assert.match(a.email.text, /committing to an Unlimited membership/);
 });
 
 test('Tour after the hold expired → Warm, team still alerted', () => {
@@ -142,7 +156,7 @@ test('email links only render a confirmation form (POST) and never change state'
   const r = view(invited(), 'no');
   assert.equal(r.status, 200);
   assert.deepEqual(r.actions, []);
-  assert.match(r.page, /<form method="POST" action="https:\/\/n8n\.test\/webhook\/akari-waitlist\/respond-confirm">/);
+  assert.match(r.page, /<form method="POST" action="https:\/\/n8n\.test\/webhook\/akari-waitlist\/respond-confirm" onsubmit="[^"]*disabled=true">/);
   assert.match(r.page, new RegExp(`name="t" value="${TOKEN}"`));
   assert.match(r.page, /name="a" value="no"/);
   assert.match(r.page, /<textarea/);

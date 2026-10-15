@@ -66,6 +66,18 @@ test('Build New Entries skips queues the person is already on and chunks by 10',
   assert.equal(out[0].typecast, true);
 });
 
+test('Build New Entries: a recent signup is not put back on the list they just joined; an old one can rejoin', () => {
+  const p = parse(typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited', 'Daytime'] }));
+  const existing = [
+    entry({ Email: p.email, Location: 'Williamsburg', Membership: 'Unlimited', Status: 'Signed Up', 'Response At': daysAgo(1) }),
+    entry({ Email: p.email, Location: 'Williamsburg', Membership: 'Daytime', Status: 'Signed Up', 'Response At': daysAgo(200) }),
+  ];
+  const out = runNode('build-new-entries', {
+    nodes: { Config: [{ json: { cfg: baseConfig() } }], 'Parse Typeform': [{ json: p }], 'Find Existing Entries': records(existing) },
+  }).map((i) => i.json);
+  assert.deepEqual(out.flatMap((c) => c.records.map((r) => r.fields.Membership)), ['Daytime']);
+});
+
 test('Build New Entries carries Zip Code and Referral Source onto every created row', () => {
   const p = parse(typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited', 'Daytime'], zip: '11211', referral: 'Instagram' }));
   const out = runNode('build-new-entries', {
@@ -124,7 +136,8 @@ test('Daily report: counts, conversion by location, attention items', () => {
   const log = (Event, extra = {}) => ({ id: `recLOG${Math.random()}`, fields: { Timestamp: hoursAgo(2), Event, Location: 'Williamsburg', Membership: 'Unlimited', 'Entry ID': extra.id || 'recA', Source: extra.Source, Reason: extra.Reason, Email: 'a@example.com' } });
   const logs = [
     log('Invited', { id: 'recA', Source: 'Auto' }), log('Invited', { id: 'recB', Source: 'Send Now' }),
-    log('Signed Up', { id: 'recA' }), log('No Longer Interested', { id: 'recC', Reason: 'Moved away' }),
+    log('Signed Up', { id: 'recA' }), log('Signed Up', { id: 'recA' }), // double-click: counted once
+    log('No Longer Interested', { id: 'recC', Reason: 'Moved away' }),
   ];
   const staleTour = entry({ Status: 'Tour Requested', 'Response At': daysAgo(9) });
   const caps = [capacity().fields, capacity({ Location: 'Greenpoint', 'Signup URL': '', 'Minimum Members': 3, 'Active Members': 1 }).fields];
@@ -141,6 +154,7 @@ test('Daily report: counts, conversion by location, attention items', () => {
   const html = p.content[1].value;
   assert.match(html, /Invited \(auto\)<\/td><td[^>]*>1/);
   assert.match(html, /Invited \(Send Now\)<\/td><td[^>]*>1/);
+  assert.match(html, /Signed up<\/td><td[^>]*>1</);
   assert.match(html, /Williamsburg<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>50%/);
   assert.match(html, /Moved away/);
   assert.match(html, /Greenpoint · Unlimited: no Signup URL/);

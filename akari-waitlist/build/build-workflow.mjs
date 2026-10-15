@@ -75,7 +75,10 @@ const PAGINATE = {
   },
 };
 
-function airtableGet(name, pos, table, formula, { executeOnce = false, paginate = true } = {}) {
+// Candidate-facing lookups don't retry (Airtable's 30s lockout outlasts any retry): they continue with the
+// error so the page can say "busy, try again in a minute" instead of showing a raw n8n error.
+const FAIL_SOFT = { onError: 'continueRegularOutput' };
+function airtableGet(name, pos, table, formula, { executeOnce = false, paginate = true, candidate = false } = {}) {
   const qp = [{ name: 'pageSize', value: '100' }];
   if (formula) qp.unshift({ name: 'filterByFormula', value: formula });
   return node(name, 'n8n-nodes-base.httpRequest', 4.2, pos, {
@@ -85,9 +88,9 @@ function airtableGet(name, pos, table, formula, { executeOnce = false, paginate 
     sendQuery: true,
     queryParameters: { parameters: qp },
     options: paginate ? PAGINATE : {},
-  }, { credentials: CREDS.airtable, ...(executeOnce ? { executeOnce: true } : {}), ...RETRY });
+  }, { credentials: CREDS.airtable, ...(executeOnce ? { executeOnce: true } : {}), ...(candidate ? FAIL_SOFT : RETRY) });
 }
-function httpJson(name, pos, method, url, body, creds, options = {}, extra = {}) {
+function httpJson(name, pos, method, url, body, creds, options = {}, extra = {}, resilience = RETRY) {
   return node(name, 'n8n-nodes-base.httpRequest', 4.2, pos, {
     method,
     url,
@@ -97,8 +100,9 @@ function httpJson(name, pos, method, url, body, creds, options = {}, extra = {})
     specifyBody: 'json',
     jsonBody: body,
     options,
-  }, { credentials: creds, ...RETRY, ...extra });
+  }, { credentials: creds, ...resilience, ...extra });
 }
+const waitNode = (name, pos, seconds) => node(name, 'n8n-nodes-base.wait', 1.1, pos, { amount: seconds, unit: 'seconds' }, { webhookId: uid(`${name}:webhook`) });
 
 // Airtable formulas (literal where possible; user input is stripped to safe characters)
 // Exported so simulation/run-simulation.mjs reads the identical "active" set production does.
@@ -111,7 +115,10 @@ const safe = (expr) => `String(${expr} || '').replace(/["\\\\]/g, '')`;
 // ── Layout ──────────────────────────────────────────────────────
 const X = { trig: -260, ack: -20, route: 260, config: 520, sw: 780, l1: 1060, l2: 1300, l3: 1540, l4: 1780, l5: 2020 };
 const Y = { intake: -300, hourly: 40, manual: 200, glofox: 360, view: 560, commit: 760, sendnow: 1120, report: 1500 };
-const EX = { respond: 2300, unpack: 2540, queue: 2780, gen: 3020, apply: 3260, chunkUpd: 3500, update: 3740, chunkLog: 3980, log: 4220, build: 4460, send: 4700 };
+const EX = {
+  respond: 2300, unpack: 2540, queue: 2780, gen: 3020, apply: 3260, chunkUpd: 3500, pendUpd: 3740, update: 3980, checkUpd: 4220, ifUpd: 4460,
+  chunkLog: 4700, pendLog: 4940, log: 5180, checkLog: 5420, ifLog: 5660, build: 5900, send: 6140,
+};
 const EXY = 760;
 
 export function buildMain() {
@@ -123,8 +130,8 @@ export function buildMain() {
     sticky('Note: Engine', [1020, -60], 1640, 280, '### 2 · Engine (hourly)\nExpires 24h holds (1st miss → Warm, 2nd → No Reply) around the clock. From 08:00–20:00 it fills each queue\'s gap (Minimum − Active − pending signups − open holds) and sends the next ~10 an early heads-up.', 7),
     sticky('Note: Responses', [1020, 360], 1640, 540, '### 3 · Candidate response\nEmail buttons open a **confirmation page** (GET). Only the button on that page (POST) changes anything, so email link scanners can\'t accept or decline for someone.\nYes → Signed Up + signup link · Tour → spot held, team alerted · Not now / No → buckets · late reply → Warm.', 7),
     sticky('Note: Send Now', [1020, 940], 1640, 400, '### 4 · Send Now (staff override)\nAirtable button → invite this person now, whatever their position or the queue count. The button URL carries the record ID and the secret key from Config.', 7),
-    sticky('Note: Report', [1020, 1380], 1640, 280, '### 5 · Daily report (19:00)\nInvited · signed up · not now · no longer interested (with reasons), conversion by location, queue snapshot, items needing attention.', 7),
-    sticky('Note: Executor', [2740, 560], 2200, 360, '### Executor\nCarries out every planned action in a safe order: **0)** swap in secure random response tokens → **1)** update Waitlist rows → **2)** write Activity Log → **3)** send emails. If an Airtable write fails, no email goes out. Writes go 10 rows per request, ≥500ms apart, to stay under Airtable\'s 5 requests/second limit.', 6),
+    sticky('Note: Report', [1020, 1380], 1640, 280, '### 5 · Daily report (07:30)\nInvited · signed up · not now · no longer interested (with reasons), conversion by location, queue snapshot, items needing attention.', 7),
+    sticky('Note: Executor', [2740, 560], 3640, 360, '### Executor\nCarries out every planned action in a safe order: **0)** swap in secure random response tokens → **1)** update Waitlist rows → **2)** write Activity Log → **3)** send emails. Writes go 10 rows per request, ≥500ms apart, to stay under Airtable\'s 5 requests/second limit. If Airtable still refuses a batch (it locks the base for 30s after a burst), only the refused batches wait 35s and are resent, up to 4 attempts, before the error alert fires. No email goes out until its rows are saved.', 6),
 
     // Triggers
     webhook('Typeform: New Submission', [X.trig, Y.intake], 'POST', 'akari-waitlist/intake', 'responseNode'),
@@ -134,7 +141,7 @@ export function buildMain() {
     webhook('Candidate Opens Link', [X.trig, Y.view], 'GET', 'akari-waitlist/respond', 'responseNode'),
     webhook('Candidate Confirms', [X.trig, Y.commit], 'POST', 'akari-waitlist/respond-confirm', 'responseNode'),
     webhook('Airtable: Send Now Button', [X.trig, Y.sendnow], 'GET', 'akari-waitlist/send-now', 'responseNode'),
-    cron('Daily Report 7pm', [X.trig, Y.report], '0 19 * * *'),
+    cron('Daily Report 7:30am', [X.trig, Y.report], '30 7 * * *'),
 
     // n8n requires every webhook here to answer via a Respond node (a Respond node sits downstream of the shared router).
     acknowledge('Acknowledge Glofox', [X.ack, Y.glofox], { disabled: true }),
@@ -179,13 +186,13 @@ export function buildMain() {
     code('Plan Engine Actions', [X.l3, Y.hourly], 'plan-engine-actions', { executeOnce: true }),
 
     // 3 · Candidate response
-    airtableGet('Find Entry by Token (view)', [X.l1, Y.view], 'waitlist', tokenFormula('query'), { paginate: false }),
+    airtableGet('Find Entry by Token (view)', [X.l1, Y.view], 'waitlist', tokenFormula('query'), { paginate: false, candidate: true }),
     code('Render Confirm Page', [X.l2, Y.view], 'render-confirm-page'),
-    airtableGet('Find Entry by Token (commit)', [X.l1, Y.commit], 'waitlist', tokenFormula('body'), { paginate: false }),
+    airtableGet('Find Entry by Token (commit)', [X.l1, Y.commit], 'waitlist', tokenFormula('body'), { paginate: false, candidate: true }),
     airtableGet('Find Entries by Email', [X.l2, Y.commit], 'waitlist',
-      `={{ 'LOWER({Email})="' + ${safe(`${TOKEN_REC}.Email`)}.toLowerCase() + '"' }}`, { executeOnce: true, paginate: false }),
+      `={{ 'LOWER({Email})="' + ${safe(`${TOKEN_REC}.Email`)}.toLowerCase() + '"' }}`, { executeOnce: true, paginate: false, candidate: true }),
     airtableGet('Find Queue Settings', [X.l3, Y.commit], 'capacity',
-      `={{ 'AND({Location}="' + ${safe(`${TOKEN_REC}.Location`)} + '",{Membership}="' + ${safe(`${TOKEN_REC}.Membership`)} + '")' }}`, { executeOnce: true, paginate: false }),
+      `={{ 'AND({Location}="' + ${safe(`${TOKEN_REC}.Location`)} + '",{Membership}="' + ${safe(`${TOKEN_REC}.Membership`)} + '")' }}`, { executeOnce: true, paginate: false, candidate: true }),
     code('Decide Response', [X.l4, Y.commit], 'decide-response', { executeOnce: true }),
 
     // 4 · Send Now
@@ -219,9 +226,17 @@ export function buildMain() {
     node('Generate Tokens', 'n8n-nodes-base.crypto', 1, [EX.gen, EXY], { action: 'generate', dataPropertyName: 'token', encodingType: 'hex', stringLength: 48 }),
     code('Apply Tokens', [EX.apply, EXY], 'apply-tokens'),
     code('Chunk Waitlist Updates', [EX.chunkUpd, EXY], 'chunk-waitlist-updates'),
-    httpJson('Update Waitlist Rows', [EX.update, EXY], 'PATCH', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
+    code('Pending Waitlist Writes', [EX.pendUpd, EXY], 'pending-writes'),
+    httpJson('Update Waitlist Rows', [EX.update, EXY], 'PATCH', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify({ records: $json.records, typecast: true }) }}', CREDS.airtable, AIRTABLE_PACE, {}, FAIL_SOFT),
+    code('Check Waitlist Writes', [EX.checkUpd, EXY], 'check-waitlist-writes'),
+    ifTrue('Retry Waitlist Writes?', [EX.ifUpd, EXY], '$json.retry === true'),
+    waitNode('Wait Out Airtable Lockout (rows)', [EX.ifUpd, EXY + 200], 35),
     code('Chunk Log Rows', [EX.chunkLog, EXY], 'chunk-log-rows'),
-    httpJson('Write Activity Log', [EX.log, EXY], 'POST', `={{ ${CFG('urls.log')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
+    code('Pending Log Writes', [EX.pendLog, EXY], 'pending-writes'),
+    httpJson('Write Activity Log', [EX.log, EXY], 'POST', `={{ ${CFG('urls.log')} }}`, '={{ JSON.stringify({ records: $json.records, typecast: true }) }}', CREDS.airtable, AIRTABLE_PACE, {}, FAIL_SOFT),
+    code('Check Log Writes', [EX.checkLog, EXY], 'check-log-writes'),
+    ifTrue('Retry Log Writes?', [EX.ifLog, EXY], '$json.retry === true'),
+    waitNode('Wait Out Airtable Lockout (log)', [EX.ifLog, EXY + 200], 35),
     code('Build Emails', [EX.build, EXY], 'build-emails'),
     httpJson('Send Email (SendGrid)', [EX.send, EXY], 'POST', `={{ ${CFG('sendgridApi')} }}`, '={{ JSON.stringify($json.payload) }}',
       CREDS.sendgrid, { ...SENDGRID_PACE, response: { response: { responseFormat: 'text' } } }),
@@ -245,7 +260,7 @@ export function buildMain() {
     'Candidate Opens Link': { main: [to('Route: Response View')] },
     'Candidate Confirms': { main: [to('Route: Response Commit')] },
     'Airtable: Send Now Button': { main: [to('Route: Send Now')] },
-    'Daily Report 7pm': { main: [to('Route: Report')] },
+    'Daily Report 7:30am': { main: [to('Route: Report')] },
     'Route: Intake': { main: [to('Config')] },
     'Route: Engine': { main: [to('Config')] },
     'Route: Response View': { main: [to('Config')] },
@@ -287,10 +302,18 @@ export function buildMain() {
     'Action Queue': { main: [to('Generate Tokens')] },
     'Generate Tokens': { main: [to('Apply Tokens')] },
     'Apply Tokens': { main: [to('Chunk Waitlist Updates')] },
-    'Chunk Waitlist Updates': { main: [to('Update Waitlist Rows')] },
-    'Update Waitlist Rows': { main: [to('Chunk Log Rows')] },
-    'Chunk Log Rows': { main: [to('Write Activity Log')] },
-    'Write Activity Log': { main: [to('Build Emails')] },
+    'Chunk Waitlist Updates': { main: [to('Pending Waitlist Writes')] },
+    'Pending Waitlist Writes': { main: [to('Update Waitlist Rows')] },
+    'Update Waitlist Rows': { main: [to('Check Waitlist Writes')] },
+    'Check Waitlist Writes': { main: [to('Retry Waitlist Writes?')] },
+    'Retry Waitlist Writes?': { main: [to('Wait Out Airtable Lockout (rows)'), to('Chunk Log Rows')] },
+    'Wait Out Airtable Lockout (rows)': { main: [to('Pending Waitlist Writes')] },
+    'Chunk Log Rows': { main: [to('Pending Log Writes')] },
+    'Pending Log Writes': { main: [to('Write Activity Log')] },
+    'Write Activity Log': { main: [to('Check Log Writes')] },
+    'Check Log Writes': { main: [to('Retry Log Writes?')] },
+    'Retry Log Writes?': { main: [to('Wait Out Airtable Lockout (log)'), to('Build Emails')] },
+    'Wait Out Airtable Lockout (log)': { main: [to('Pending Log Writes')] },
     'Build Emails': { main: [to('Send Email (SendGrid)')] },
     'Get Log (30 days)': { main: [to('Get Queue Snapshot')] },
     'Get Queue Snapshot': { main: [to('Get Capacity (report)')] },
