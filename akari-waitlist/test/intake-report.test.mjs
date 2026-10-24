@@ -132,6 +132,26 @@ test('SendGrid payload: only actions with an email; test recipient override, san
   assert.match(t.subject, /^\[TEST → a@example\.com\]/);
 });
 
+test('Test mode allow-list: allowed people get their own email for real, everyone else is still redirected', () => {
+  const mail = (to) => ({ to, name: 'X', subject: 'Hello', html: '<p>x</p>', text: 'x' });
+  const run = (to, cfg) => runNode('build-emails', { nodes: { Config: [{ json: { cfg: baseConfig(cfg) } }], 'Apply Tokens': [{ json: { email: mail(to) } }] } })[0].json.payload;
+  const cfg = { sandboxMode: false, testRecipient: 'qa@akari.test', allowedRecipients: ['jack@gmail.com', '@akarisauna.com', 'Stan@OptimizeWise.org'] };
+  for (const ok of ['jack@gmail.com', 'jack+3@gmail.com', 'JACK+tour@Gmail.com', 'jack.elder+1@akarisauna.com', 'stan+10@optimizewise.org']) {
+    const p = run(ok, cfg);
+    assert.deepEqual(p.personalizations[0].to.map((t) => t.email), [ok], ok);
+    assert.doesNotMatch(p.subject, /TEST/, ok);
+  }
+  for (const no of ['robbie@braze.com', 'jackk@gmail.com', 'jack@gmail.com.evil.test', 'x@notakarisauna.com', 'someone@other.akarisauna.com.au']) {
+    const p = run(no, cfg);
+    assert.deepEqual(p.personalizations[0].to, [{ email: 'qa@akari.test' }], no);
+    assert.match(p.subject, /^\[TEST → /, no);
+  }
+  // A list is only sent for real when every address on it is allowed.
+  assert.deepEqual(run(['jack@gmail.com', 'robbie@braze.com'], cfg).personalizations[0].to, [{ email: 'qa@akari.test' }]);
+  // The allow-list does nothing unless test mode is on.
+  assert.deepEqual(run('robbie@braze.com', { sandboxMode: false, allowedRecipients: ['jack@gmail.com'] }).personalizations[0].to, [{ email: 'robbie@braze.com', name: 'X' }]);
+});
+
 test('Daily report: counts, conversion by location, attention items', () => {
   const log = (Event, extra = {}) => ({ id: `recLOG${Math.random()}`, fields: { Timestamp: hoursAgo(2), Event, Location: 'Williamsburg', Membership: 'Unlimited', 'Entry ID': extra.id || 'recA', Source: extra.Source, Reason: extra.Reason, Email: 'a@example.com' } });
   const logs = [

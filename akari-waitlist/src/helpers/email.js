@@ -69,11 +69,26 @@ Akari team`;
   return { to: e.email, name: e.name, subject: `${e.membership} Membership Now Available at Akari ${e.location}`, html, text };
 }
 
+// Test mode (testRecipient set) redirects every email to that one inbox, except to people on
+// allowedRecipients, who get theirs for real. An entry is an address ('jack@x.com', which also
+// matches jack+2@x.com) or a whole domain ('@akarisauna.com').
+const mailKey = (a) => {
+  const [local, domain] = String(a || '').trim().toLowerCase().split('@');
+  return `${(local || '').split('+')[0]}@${domain || ''}`;
+};
+function isAllowedRecipient(address) {
+  const key = mailKey(address);
+  return (CFG.allowedRecipients || []).some((entry) => {
+    const e = String(entry || '').trim().toLowerCase();
+    return e.startsWith('@') ? key.endsWith(e) : key === mailKey(e);
+  });
+}
+
 function sendgridPayload(m) {
   const list = (Array.isArray(m.to) ? m.to : [m.to]).filter(Boolean);
   let to = list.map((email) => (m.name && list.length === 1 ? { email, name: m.name } : { email }));
   let subject = m.subject;
-  if (CFG.testRecipient) {
+  if (CFG.testRecipient && !(list.length && list.every(isAllowedRecipient))) {
     subject = `[TEST → ${list.join(', ')}] ${subject}`;
     to = [{ email: CFG.testRecipient }];
   }

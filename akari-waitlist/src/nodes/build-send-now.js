@@ -28,7 +28,11 @@ const actions = [{
 const warnings = [];
 if (['Signed Up', 'No Longer Interested', 'Removed'].includes(prior)) warnings.push(`Their previous status was <strong>${esc(prior)}</strong>.`);
 if (prior === 'Invited' && e.token) warnings.push('They already had an open invite; the old links no longer work.');
-if (CFG.testRecipient) warnings.push(`Test mode: the email was redirected to ${esc(CFG.testRecipient)}.`);
+if (CFG.testRecipient) {
+  warnings.push(isAllowedRecipient(e.email)
+    ? 'Test mode: this address is on the allow-list, so the email went to them for real.'
+    : `Test mode: the email was redirected to ${esc(CFG.testRecipient)}.`);
+}
 if (CFG.sandboxMode) warnings.push('SendGrid sandbox mode is on, so no email was actually delivered.');
 
 return reply(200, 'Invite sent', `<p>Sent to <strong>${esc(e.name || e.email)}</strong> (${esc(e.email)}) for the <strong>${esc(e.membership)}</strong> membership at <strong>${esc(e.location)}</strong>.</p>

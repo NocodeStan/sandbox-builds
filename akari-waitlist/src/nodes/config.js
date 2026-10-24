@@ -23,7 +23,8 @@ const cfg = {
   // Safety switches — leave as-is until testing is signed off
   engineEnabled: true, // false = the hourly engine does nothing (webhooks still work)
   sandboxMode: true, // true = SendGrid accepts but delivers nothing
-  testRecipient: '', // e.g. 'you@yourdomain.com' → every email is redirected here
+  testRecipient: '', // e.g. 'you@yourdomain.com' → every email is redirected here, except to allowedRecipients
+  allowedRecipients: [], // only used while testRecipient is set. People here get their email for real: 'name@x.com' (also matches name+2@x.com) or '@yourdomain.com' for a whole domain
   sendNowSecret: 'CHANGE-ME', // long random string; also goes in the Airtable button URL
 
   // Business rules
