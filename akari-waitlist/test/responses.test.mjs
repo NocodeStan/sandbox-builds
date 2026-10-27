@@ -177,7 +177,7 @@ function sendNow(rec, cfg = {}) {
   })[0].json;
 }
 
-test('Send Now invites anyone immediately, whatever their status, with a fresh 24h hold', () => {
+test('Send Now invites anyone immediately, whatever their status, with a fresh 48h hold', () => {
   for (const status of ['Waiting', 'Not Right Now', 'No Reply', 'Tour Requested', 'Signed Up']) {
     const r = sendNow(entry({ Status: status }));
     assert.equal(r.status, 200);

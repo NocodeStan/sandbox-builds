@@ -30,7 +30,7 @@ const cfg = {
   // Business rules
   timezone: 'America/New_York',
   sendWindow: { startHour: 8, endHour: 20 }, // invites + heads-ups only go out 08:00–19:59 local
-  holdHours: 24, // claim window that holds the spot
+  holdHours: 48, // claim window that holds the spot (Jack, 27 Oct: 48h)
   primeCount: 10, // "next ~10 in line" get the early heads-up
   newMemberWeight: 3, // 1 new signup ≈ 3 existing-member upgrades
   warmCooldownHours: 72, // a timed-out person is first in line again after this

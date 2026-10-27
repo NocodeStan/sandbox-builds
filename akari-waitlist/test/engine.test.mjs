@@ -23,7 +23,7 @@ test('no gap → no invites, but the next 10 in line get a heads-up', () => {
   assert.ok(primed.every((a) => a.fields.Status === 'Primed' && a.email));
 });
 
-test('gap of 2 → the two longest-waiting are invited with a 24h hold; the next 10 are primed', () => {
+test('gap of 2 → the two longest-waiting are invited with a 48h hold; the next 10 are primed', () => {
   const people = Array.from({ length: 13 }, (_, i) => entry({ 'Joined At': daysAgo(30 - i) }));
   const out = plan([capacity({ 'Minimum Members': 12, 'Active Members': 10 })], people);
   const invited = of(out, 'Invited');
@@ -33,7 +33,7 @@ test('gap of 2 → the two longest-waiting are invited with a 24h hold; the next
   assert.equal(inv.fields['Invite Source'], 'Auto');
   assert.equal(inv.fields['Invite Token'], '__TOKEN__', 'real token is added by the Generate Tokens node');
   const holdMs = new Date(inv.fields['Invite Expires At']) - new Date(inv.fields['Invited At']);
-  assert.equal(holdMs, 24 * 3600000);
+  assert.equal(holdMs, 48 * 3600000);
   assert.ok(inv.email.html.includes('respond?t=__TOKEN__&amp;a=yes'));
   assert.ok(inv.email.html.includes('a=tour'));
   assert.deepEqual(ids(of(out, 'Primed')), people.slice(2, 12).map((p) => p.id));
@@ -152,7 +152,7 @@ test('someone near the front of two queues gets one combined heads-up email', ()
 test('heads-up follows Jack\'s copy: subject with the right article, real hold length, reply to leave', () => {
   const m = of(plan([capacity()], [entry({})]), 'Primed')[0].email;
   assert.equal(m.subject, "You're Almost Up for an Unlimited Membership at Akari Williamsburg");
-  assert.match(m.text, /you'll have 24 hours to claim your spot/);
+  assert.match(m.text, /you'll have 48 hours to claim your spot/);
   assert.match(m.text, /just reply to this email and we'll remove you/);
   assert.match(m.text, /Warmly,\nAkari team$/);
   assert.match(m.html, /A spot could open up any day now/);

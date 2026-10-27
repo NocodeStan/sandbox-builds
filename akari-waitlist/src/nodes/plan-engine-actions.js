@@ -23,7 +23,7 @@ const queues = recordsOf('Get Capacity')
 
 const actions = [];
 
-// 1. Expire holds whose 24h window passed with no reply (runs around the clock).
+// 1. Expire holds whose window (holdHours) passed with no reply (runs around the clock).
 for (const e of entries) {
   if (e.status === 'Invited' && e.expiresAt && e.expiresAt <= NOW) {
     const timeouts = e.timeoutCount + 1;

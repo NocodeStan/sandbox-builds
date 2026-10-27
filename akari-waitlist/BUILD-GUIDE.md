@@ -39,7 +39,7 @@ Source of truth: Eraser board **Waitlist Automation_1.0** (11 Sep call notes + a
 | **Prioritisation** 1 new signup ≈ 3 existing-member upgrades | `newMemberWeight: 3` |
 | **24 Sep** Manual reorder stays available permanently | `Manual Rank` column always wins |
 | **Step 5** Early heads-up to the next ~10 in each queue | Plan Engine Actions (`primeCount: 10`) |
-| **Step 6** Invite by email (SendGrid) with a response window | Executor → SendGrid; `holdHours: 24` |
+| **Step 6** Invite by email (SendGrid) with a response window | Executor → SendGrid; `holdHours: 48` (was 24; changed at Jack's request, 27 Oct) |
 | **24 Sep** The 24h window *holds the spot*; tours convert at over 90% | Hold counts against the gap. Plus a **"tour first"** response that keeps holding the spot (see A1). |
 | **Step 7** Yes → signup link (Glofox handles payment) · Not now → "Not Right Now", manual follow-up · No → "No Longer Interested", reason captured · no reply → Warm, keeps priority | Lane 3 · Candidate response |
 | **Notes** Late reply goes to Warm, no penalty | Decide Response |
@@ -100,7 +100,7 @@ flowchart LR
 |---|---|---|
 | Waiting | Intake / staff | Primed or Invited |
 | Primed | Engine (heads-up sent) | Invited |
-| Invited | Engine or Send Now (24h hold) | Signed Up · Tour Requested · Not Right Now · No Longer Interested · Warm (timeout) |
+| Invited | Engine or Send Now (48h hold) | Signed Up · Tour Requested · Not Right Now · No Longer Interested · Warm (timeout) |
 | Tour Requested | Candidate | Staff Send Now after the tour → Invited, or staff edit |
 | Warm | 1st timeout or late reply | Re-invited first (after 72h cool-off unless they replied late) |
 | No Reply | 2nd timeout | Staff / future campaign |
@@ -115,7 +115,7 @@ flowchart LR
 
 ### 4.1 Accounts and keys
 - **Airtable personal access token** with scopes `data.records:read` and `data.records:write`, plus `schema.bases:read` and `schema.bases:write` if you'll use the setup script. Give it access to the Akari base.
-- **SendGrid API key** with *Mail Send* permission. **Authenticate the sending domain (SPF/DKIM) before go-live**: a 24h hold is only fair if the invite lands in the inbox.
+- **SendGrid API key** with *Mail Send* permission. **Authenticate the sending domain (SPF/DKIM) before go-live**: a 48h hold is only fair if the invite lands in the inbox.
 - **Typeform** access to the waitlist form.
 - **n8n**: Cloud or self-hosted. Tested on 2.40.6. The node versions used also exist in 1.60+.
 - **Glofox signup URL** for each location × membership. This is the private link staff send today.
@@ -211,7 +211,7 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 |---|---|---|
 | Get Capacity | HTTP GET Airtable (paginated) | Enabled queues. |
 | Get Active Entries | HTTP GET Airtable (paginated, 500ms between pages) | Waiting / Primed / Invited / Warm / Tour Requested, plus Signed Up in the last 60 days. |
-| Plan Engine Actions | Code | 1) Expires holds past 24h (→ Warm / No Reply). 2) Inside the send window, per queue: works out the open spots, invites in priority order, then primes the next 10. Makes no changes itself; outputs actions to the executor. |
+| Plan Engine Actions | Code | 1) Expires holds past 48h (→ Warm / No Reply). 2) Inside the send window, per queue: works out the open spots, invites in priority order, then primes the next 10. Makes no changes itself; outputs actions to the executor. |
 
 ### Lane 3 · Candidate response
 | Node | Type | What it does |
@@ -230,7 +230,7 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 |---|---|---|
 | Send Now Authorised? | IF | Secret matches **and** the id looks like an Airtable record id **and** the secret isn't still `CHANGE-ME`. |
 | Get Entry for Send Now | HTTP GET Airtable | The row. |
-| Build Send Now | Code | Fresh 24h invite whatever the status, position or queue count. Ignores a second click within 2 minutes. The page warns if test or sandbox mode is on. |
+| Build Send Now | Code | Fresh 48h invite whatever the status, position or queue count. Ignores a second click within 2 minutes. The page warns if test or sandbox mode is on. |
 | Forbidden Page | Code | 403 page. |
 
 ### Executor (shared)
@@ -280,7 +280,7 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 | T1 | New signup | Submit the Typeform with 2 locations × 2 memberships | 4 Waitlist rows `Waiting`, 4 `Joined` logs |
 | T2 | Duplicate | Submit again | No new rows; Typeform shows a successful delivery |
 | T3 | Bad submission | Submit without a location | Failed delivery in Typeform; error-alert email |
-| T4 | Invite | Capacity: Minimum = Active + 1, Enabled, Signup URL set → **Run Engine Now** | Top-priority person `Invited`, token set, expiry = +24h, invite email |
+| T4 | Invite | Capacity: Minimum = Active + 1, Enabled, Signup URL set → **Run Engine Now** | Top-priority person `Invited`, token set, expiry = +48h, invite email |
 | T5 | Heads-up | Same run, with ≥ 3 people waiting | Next ones `Primed`; one email per person |
 | T6 | Link scanner safety | Open an email button link in a browser | Confirmation page only; row unchanged |
 | T7 | Yes | Press the button | Redirect to the Glofox URL; `Signed Up`; confirmation email |
@@ -316,7 +316,7 @@ Date-time fields: time zone America/New_York.
 
 ## 9. Runbook for the Akari team
 - **After each recount in Glofox**, update `Active Members`. This also clears "pending signups" from the maths.
-- **Tour Requested**: book the tour; afterwards press **Send Now** (sends the signup link with a fresh 24h hold), or set the status by hand.
+- **Tour Requested**: book the tour; afterwards press **Send Now** (sends the signup link with a fresh 48h hold), or set the status by hand.
 - **Not Right Now**: follow up by hand; press Send Now when they're ready.
 - **Reorder**: type a number in `Manual Rank` (1 = next). Clear it to go back to the rules.
 - **Pause everything**: set `engineEnabled: false` in Config. Links and Send Now keep working.
@@ -329,7 +329,7 @@ Date-time fields: time zone America/New_York.
 |---|---|---|
 | Airtable allows **5 requests/second per base** and then **locks the base for 30s** — longer than n8n's retry settings can wait (max 5 tries × 5s). A burst of replies, or replies landing as the hourly run starts, trips it (reproduced in UAT R7/X1). | Writes paced ≤2/s, 10 rows per request. Refused write batches wait 35s and are resent (only those, up to 4 attempts), so nothing shown to a candidate as done goes unsaved. Refused candidate lookups show "try again in a minute", which retries itself after a random 35–55s. The engine fails loudly and reruns next hour; its alert says no action is needed. | Self-hosted: `N8N_CONCURRENCY_PRODUCTION_LIMIT=1` serialises executions and removes the collisions entirely. Longer term: state in Postgres / n8n Data Tables, Airtable as the admin view. |
 | **n8n execution quota**: the hourly engine alone is ~720 runs/month, plus 1 per signup and 2 per response. | — | Check the plan. Every 2 hours halves it at the cost of slower chain advance. |
-| **Deliverability**: an invite in spam burns a 24h hold. | The heads-up email warns people an invite is coming. | Domain authentication is a go-live gate (§7). |
+| **Deliverability**: an invite in spam burns a 48h hold. | The heads-up email warns people an invite is coming. | Domain authentication is a go-live gate (§7). |
 | "Signed Up" ≠ paid. | Staff recount resets the maths. | Glofox payment or member webhook, once confirmed. |
 | Send Now secret lives in the Airtable button URL. | Internal base only; Send Now is refused while the secret is still the default. | Rotate the secret when staff change. |
 | Typeform label changes. | Parser matches by keywords; bad submissions alert instead of vanishing. | — |

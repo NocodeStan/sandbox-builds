@@ -4,7 +4,7 @@
 //
 // Statuses: PASS · FAIL (defect, must fix) · RISK (works, but a known residual risk) · OPEN (needs a product decision)
 // Usage: NODE24=... N8N_BIN=... UAT_LABEL=run-1 node test/uat/run-uat.mjs
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildMain } from '../../build/build-workflow.mjs';
@@ -16,6 +16,8 @@ const LABEL = process.env.UAT_LABEL || new Date().toISOString().replace(/[:.]/g,
 const SECRET = 'uat-secret-456';
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
+// Hold length comes from the shipped Config so the timeline and copy checks follow it.
+const HOLD_H = Number(readFileSync(new URL('../../src/nodes/config.js', import.meta.url), 'utf8').match(/holdHours:\s*(\d+)/)[1]);
 const TEAM = 'team@YOUR-DOMAIN.com';
 const SIGNUP = (slug) => `https://app.glofox.test/signup/${slug}`;
 const iso = (ms) => new Date(ms).toISOString();
@@ -278,23 +280,23 @@ try {
   expect('4-Visit price $140/month', () => has(textOf(inv(G(2))), /\$140\/month/));
   expect('Summer Pass (no price yet) falls back to "details, including pricing, … membership page"', () => has(textOf(inv(at(5))), /including pricing, can be found on our membership page/));
   expect('the membership page is a clickable link in the email', () => has(htmlOf(cleoInv), /<a [^>]*href="https:\/\/www\.akarisauna\.com\/membership"/));
-  expect('deadline shown is 24 hours out', () => {
+  expect(`deadline shown is ${HOLD_H} hours out`, () => {
     const exp = new Date(rowOf(at(10), 'Williamsburg', 'Unlimited').fields['Invite Expires At']);
-    return { ok: Math.abs(exp - Date.now() - DAY) < 10 * 60000, detail: `expires ${exp.toISOString()}` };
+    return { ok: Math.abs(exp - Date.now() - HOLD_H * HOUR) < 10 * 60000, detail: `expires ${exp.toISOString()}` };
   });
   expect('four buttons in Jack\'s order: Sign up · Tour first · Not ready yet · No longer interested', () => eq([...htmlOf(cleoInv).matchAll(/a=(yes|tour|notnow|no)"[^>]*>([^<]+)</g)].map((x) => x[2]), ['Sign up', 'Tour first', 'Not ready yet', 'No longer interested']));
   expect('"Not ready yet" explains they stay on the list', () => has(textOf(cleoInv), /Not ready yet: \S+ \(we'll keep you on the waitlist/));
   expect('signed "Warmly, Akari team"', () => has(textOf(cleoInv), /Warmly,\nAkari team$/));
   expect('each button carries this person\'s own token', () => eq(tokenIn(cleoInv, 'yes'), rowOf(at(10), 'Williamsburg', 'Unlimited').fields['Invite Token']));
 
-  scenario('C2', 'Jack reviews the heads-up copy', 'Jack compares the "nearly at the front" email with his draft (template 3), with the hold at 24h not 48h.');
+  scenario('C2', 'Jack reviews the heads-up copy', 'Jack compares the "nearly at the front" email with his draft (template 3).');
   const benHU = inbox(at(12)).find(isHeadsUp);
   const mayaHU = inbox(at(1)).find(isHeadsUp);
   const zedHU = inbox(at(6)).find(isHeadsUp);
   expect('subject follows Jack\'s template: "You\'re Almost Up for an Unlimited Membership at Akari Williamsburg"', () => eq(benHU?.subject, "You're Almost Up for an Unlimited Membership at Akari Williamsburg"));
   expect('inbox preview: "A spot could open up any day now"', () => eq(preheaderOf(benHU), 'A spot could open up any day now'));
   expect('body follows Jack\'s wording ("close to the front of the line…")', () => has(textOf(benHU), /you're now close to the front of the line, and a spot could open up any day now/));
-  expect('states the real hold: 24 hours (not 48)', () => has(textOf(benHU), /you'll have 24 hours to claim your spot/));
+  expect(`states the real hold: ${HOLD_H} hours`, () => has(textOf(benHU), new RegExp(`you'll have ${HOLD_H} hours to claim your spot`)));
   expect('tells them how to come off the list', () => has(textOf(benHU), /let us know|reply/i));
   expect('signed "Warmly, Akari team"', () => has(textOf(benHU), /Warmly,\nAkari team$/));
   expect('Maya\'s combined heads-up names both memberships', () => has(textOf(mayaHU), /Unlimited[\s\S]*Daytime|Daytime[\s\S]*Unlimited/));
@@ -445,8 +447,8 @@ try {
   expect('report layout matches Jack\'s template 4 (Needs attention / Last 24 hours / By location)', () => has(htmlOf(rep), /Invites expiring in the next 24 hours/), 'decision');
 
   // ═══ DAY 1 ═══════════════════════════════════════════════════
-  travel(25);
-  scenario('E2', 'Next morning: unanswered holds time out, the line moves on', 'Guest01, Guest09, Guest10 never replied. Guest04 changed their mind yesterday and was told they\'re first in line.');
+  travel(HOLD_H + 1);
+  scenario('E2', 'The hold window ends: unanswered holds time out, the line moves on', 'Guest01, Guest09, Guest10 never replied. Guest04 changed their mind yesterday and was told they\'re first in line.');
   const e2 = await engine('Day 1 10am');
   expect('Guest01, Guest09, Guest10 → Warm (1st timeout)', () => eq([G(1), G(9), G(10)].map((e) => [statusOf(e, 'Williamsburg', '4-Visit'), rowOf(e, 'Williamsburg', '4-Visit').fields['Timeout Count']]), [['Warm', 1], ['Warm', 1], ['Warm', 1]]));
   expect('Ava\'s tour hold does not time out', () => eq(statusOf(at(11), 'Williamsburg', 'Unlimited'), 'Tour Requested'));

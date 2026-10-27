@@ -80,7 +80,7 @@ Akari team`;
 function tourAlert(late) {
   const signupDate = fmtTime(e.joinedAt);
   // Tour Requested holds never expire on their own once set (unlike a plain Invited hold) — say so
-  // plainly rather than echoing the original 24h deadline, which no longer applies once held this way.
+  // plainly rather than echoing the original hold deadline, which no longer applies once held this way.
   const why = declined ? 'they had already told us they weren\'t ready' : 'they replied after their original hold expired';
   const holdUntil = late ? `Not held — ${why}` : 'No deadline — held until your team follows up';
   const html = emailLayout(`
