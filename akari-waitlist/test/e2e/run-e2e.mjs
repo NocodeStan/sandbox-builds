@@ -3,7 +3,7 @@
 // Usage: NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n node test/e2e/run-e2e.mjs
 import assert from 'node:assert/strict';
 import { typeformPayload } from '../fixtures.mjs';
-import { sleep, startStack, waitFor } from './stack.mjs';
+import { CAL_SECRET, CAL_URL, sleep, startStack, waitFor } from './stack.mjs';
 
 const SECRET = 'e2e-secret-123';
 const stack = await startStack({ secret: SECRET });
@@ -56,7 +56,7 @@ try {
   console.log('• n8n is up with the workflow published\n');
 
   await step('Intake: Typeform submission → one row per location × membership, logged', async () => {
-    const r = await post('intake', typeformPayload({ locations: ['Williamsburg', 'LES'], memberships: ['Unlimited', 'Daytime'] }));
+    const r = await post('intake', typeformPayload({ locations: ['Williamsburg', 'LES'], memberships: ['Unlimited', 'Daytime'], submittedAt: ago(1) }));
     assert.equal(r.status, 200, await r.text());
     await waitFor(() => logs('Joined').length === 4, 'intake rows + logs');
     const jane = mock.table('Waitlist').filter((x) => x.fields.Email === 'jane.doe@example.com');
@@ -66,7 +66,7 @@ try {
   });
 
   await step('Intake: resubmitting the same form creates no duplicates', async () => {
-    const r = await post('intake', typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited'], token: 'tok-again' }));
+    const r = await post('intake', typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited'], token: 'tok-again', submittedAt: ago(1) }));
     assert.equal(r.status, 200, 'duplicates are acknowledged so Typeform does not retry');
     await sleep(1500);
     assert.equal(mock.table('Waitlist').filter((x) => x.fields.Email === 'jane.doe@example.com').length, 4);
@@ -166,7 +166,7 @@ try {
     await post('glofox-end-date', {});
     await waitFor(() => get(casey.id).fields.Status === 'Warm' && get(blair.id).fields.Status === 'Invited', 'Casey warm, Blair invited');
     assert.equal(get(casey.id).fields['Timeout Count'], 1);
-    assert.equal(logs('Timed Out').length, 1);
+    await waitFor(() => logs('Timed Out').length === 1, 'timeout logged (written just after the row update)');
   });
 
   await step('Late reply after the hold expired → stays Warm with priority, told they are first in line', async () => {
@@ -205,6 +205,56 @@ try {
     assert.match(html, /Signed up<\/td><td[^>]*>1</);
     assert.match(html, /Williamsburg · Unlimited/);
     assert.match(html, /Travelling until November/);
+  });
+
+  await step('Tour first with a Cal.com link → candidate sent to their location\'s booking page, pre-filled and tagged with their row', async () => {
+    const r = await form({ t: tokenOf(dana.id), a: 'tour' });
+    const html = await r.text();
+    assert.equal(r.status, 200);
+    assert.ok(html.includes(`url=${CAL_URL}?name=Dana&amp;email=dana%40example.com&amp;metadata%5Bentry%5D=${dana.id}`), html.slice(0, 400));
+    const view = await (await fetch(`${BASE}/respond?t=${tokenOf(dana.id)}&a=tour`)).text();
+    assert.match(view, /Choose a tour time/);
+    assert.doesNotMatch(view, /<textarea/);
+  });
+
+  const calHook = (k, body) => fetch(`${BASE}/tour-booking?k=${k}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await step('Cal.com booking → Tour At recorded on the row; a wrong webhook key is refused', async () => {
+    const start = new Date(Date.now() + 26 * HOUR).toISOString();
+    const bad = await calHook('wrong', { triggerEvent: 'BOOKING_CREATED', payload: { startTime: start, metadata: { entry: dana.id } } });
+    assert.equal(bad.status, 403);
+    await sleep(1500);
+    const r = await calHook(CAL_SECRET, { triggerEvent: 'BOOKING_CREATED', payload: { uid: 'bk-1', startTime: start, metadata: { entry: dana.id }, attendees: [{ email: 'dana@example.com' }] } });
+    assert.equal(r.status, 200);
+    await waitFor(() => get(dana.id).fields['Tour At'] === start, 'Tour At written');
+    await waitFor(() => logs('Tour Booked').length === 1, 'Tour Booked logged');
+  });
+
+  await step('48h after the tour with no sign-up link sent → hold released (Not Right Now)', async () => {
+    get(dana.id).fields['Tour At'] = new Date(Date.now() - 49 * HOUR).toISOString();
+    await post('glofox-end-date', {});
+    await waitFor(() => get(dana.id).fields.Status === 'Not Right Now', 'Dana released');
+    assert.match(get(dana.id).fields.Reason, /no sign-up link sent within 48h/);
+    await waitFor(() => logs('Tour Released').length === 1, 'Tour Released logged');
+  });
+
+  await step('Send Sign-up Link (staff button) → Signed Up, confirmation with the Glofox link; wrong key and missing Signup URL refused', async () => {
+    assert.equal((await fetch(`${BASE}/send-signup?id=${dana.id}&k=wrong`)).status, 403);
+    await sleep(1500);
+    const before = emailsTo('dana@example.com').length;
+    const r = await fetch(`${BASE}/send-signup?id=${dana.id}&k=${SECRET}`);
+    const html = await r.text();
+    assert.equal(r.status, 200, html);
+    assert.match(html, /Sign-up link sent/);
+    await waitFor(() => get(dana.id).fields.Status === 'Signed Up', 'Dana signed up');
+    await waitFor(() => emailsTo('dana@example.com').length === before + 1, 'confirmation email');
+    const m = emailsTo('dana@example.com').at(-1);
+    assert.equal(m.subject, 'Your Private Sign Up Link for Akari Williamsburg');
+    assert.match(m.content[0].value, /wb-unl/);
+    await waitFor(() => logs('Signed Up').some((l) => l.fields.Source === 'Admin'), 'admin signup logged');
+    await sleep(1500);
+    const [les] = mock.seed('Waitlist', [person('Lesley', { Location: 'Lower East Side', 'Joined At': ago(3) })]);
+    const noUrl = await fetch(`${BASE}/send-signup?id=${les.id}&k=${SECRET}`);
+    assert.equal(noUrl.status, 409);
   });
 
   await step('Airtable limits respected: no 429s, no >10-record batches, no bad formulas or payloads', async () => {

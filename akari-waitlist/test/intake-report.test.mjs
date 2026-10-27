@@ -178,5 +178,5 @@ test('Daily report: counts, conversion by location, attention items', () => {
   assert.match(html, /Williamsburg<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>50%/);
   assert.match(html, /Moved away/);
   assert.match(html, /Greenpoint · Unlimited: no Signup URL/);
-  assert.match(html, /has had a tour hold since/);
+  assert.match(html, /asked for a tour on .* and has no tour time booked yet/);
 });

@@ -47,69 +47,48 @@ if (e.status === 'Signed Up' && action !== 'leave') {
   return reply(200, 'You\'ve already claimed this spot', '<p>If you need your signup link again or want to change anything, just reply to our email.</p>');
 }
 
-function confirmationEmail(removed, stillOn) {
-  const linkText = signupUrl || '(signup link pending — we\'ll send it shortly)';
-  const linkHtml = signupUrl ? `<a href="${esc(signupUrl)}" style="color:#1f1d1a">${esc(signupUrl)}</a>` : esc(linkText);
-  const unlimited = removed.length > 0;
-  const overlap = unlimited
-    ? `<p>Once you sign up for your Unlimited membership, we'll automatically remove you from any other Akari waitlists you've joined.</p>`
-    : stillOn.length
-      ? `<p>You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: <a href="${esc(respondLink(e.token, 'leave'))}" style="color:#1f1d1a">${esc(respondLink(e.token, 'leave'))}</a></p>`
-      : '';
-  const html = emailLayout(`
-<p>Hi ${esc(firstName(e.name))},</p>
-<p>Thank you for your interest in joining Akari! Here is your private sign up link for your ${esc(e.membership)} membership at Akari ${esc(e.location)}: ${linkHtml}</p>
-${overlap}
-<p>Please let us know if you have any issues signing up!</p>
-<p>Warmly,<br>Akari team</p>`, `Your ${e.membership} membership is ready for you`);
-  const text = `Hi ${firstName(e.name)},
-
-Thank you for your interest in joining Akari! Here is your private sign up link for your ${e.membership} membership at Akari ${e.location}: ${linkText}
-
-${unlimited
-    ? 'Once you sign up for your Unlimited membership, we\'ll automatically remove you from any other Akari waitlists you\'ve joined.'
-    : stillOn.length ? `You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: ${respondLink(e.token, 'leave')}` : ''}
-
-Please let us know if you have any issues signing up!
-
-Warmly,
-Akari team`;
-  return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for Akari ${e.location}`, html, text };
-}
+const calUrl = tourBookingUrl(e);
 
 function tourAlert(late) {
   const signupDate = fmtTime(e.joinedAt);
-  // Tour Requested holds never expire on their own once set (unlike a plain Invited hold) — say so
-  // plainly rather than echoing the original hold deadline, which no longer applies once held this way.
   const why = declined ? 'they had already told us they weren\'t ready' : 'they replied after their original hold expired';
-  const holdUntil = late ? `Not held — ${why}` : 'No deadline — held until your team follows up';
+  const holdUntil = late
+    ? `Not held — ${why}`
+    : `${CFG.tourReleaseHours} hours after their tour, unless you send the sign-up link first`;
+  const booking = calUrl
+    ? 'They\'ve been taken to our Cal.com page to pick a tour time. The booking shows up in Cal.com as usual, and the tour time is added to their row in Airtable.'
+    : 'Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space. Once it\'s booked, add the time to the Tour At field on their row in Airtable.';
+  const hold = late
+    ? `Because ${why}, the spot was <strong>not</strong> held for them — they're now first in line (Warm) for the next opening.`
+    : `Their spot stays held until ${CFG.tourReleaseHours} hours after the tour. If nothing has been sent by then, the spot is released and they move to Not Right Now.`;
+  const next = `If they decide to join${late ? '' : ' after the tour'}, press <strong>Send Sign-up Link</strong> on their row in Airtable. That emails their private sign-up link and marks them Signed Up.`;
   const html = emailLayout(`
 <p>Hi team,</p>
 <p><strong>${esc(e.name || e.email)}</strong> would like to tour Akari ${esc(e.location)} before committing to ${article(e.membership)} ${esc(e.membership)} membership. Their details are below:</p>
 <p>Email: ${esc(e.email)}<br>Phone: ${esc(e.phone || '—')}<br>On the waitlist since: ${esc(signupDate)}<br>Spot held until: ${esc(holdUntil)}${note ? `<br>Preferred times: ${esc(note)}` : ''}</p>
-<p>Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.</p>
-<p>${late
-    ? `Because ${why}, the spot was <strong>not</strong> held for them — they're now first in line (Warm) for the next opening.`
-    : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}</p>
-<p>If they decide to join${late ? '' : ' after the tour'}, press <strong>Send Now</strong> on their row in Airtable — that sends them a fresh invite with their private sign up link.</p>
-<p>Thank you,<br>Akari team</p>`, 'Please reach out within 1 business day to schedule');
+<p>${esc(booking)}</p>
+<p>${hold}</p>
+<p>${next}</p>
+<p>Thank you,<br>Akari team</p>`, calUrl ? 'They\'re picking a tour time on Cal.com' : 'Please reach out within 1 business day to schedule');
+  const strip = (h) => h.replace(/<\/?strong>/g, '');
   const text = `Hi team,
 
 ${e.name || e.email} would like to tour Akari ${e.location} before committing to ${article(e.membership)} ${e.membership} membership. Their details are below:
 Email: ${e.email} | Phone: ${e.phone || '-'} | On the waitlist since: ${signupDate} | Spot held until: ${holdUntil}${note ? ` | Preferred times: ${note}` : ''}
 
-Please reach out within 1 business day to schedule a time. When possible, we recommend booking during a quieter hour so they can get a real feel for the space.
+${booking}
 
-${late
-    ? `Because ${why}, the spot was NOT held for them — they're now first in line (Warm) for the next opening.`
-    : 'Once the tour is booked, there\'s nothing further to do to protect the hold — it stays open until you act on it.'}
+${strip(hold)}
 
-If they decide to join${late ? '' : ' after the tour'}, press Send Now on their row in Airtable — that sends them a fresh invite with their private sign up link.
+${strip(next)}
 
 Thank you,
 Akari team`;
   return { to: CFG.teamEmails, subject: `Tour Request: ${e.name || e.email} at Akari ${e.location}${late ? ' (late reply)' : ''}`, html, text };
 }
+
+const toCalendar = (title, message, actions = acts) =>
+  [{ json: { status: 200, page: redirectPage(calUrl, title, message, 'Choose a tour time'), actions } }];
 
 switch (action) {
   case 'yes': {
@@ -123,7 +102,7 @@ switch (action) {
     const unlimited = /unlimited/i.test(e.membership);
     const removed = unlimited ? others : [];
     const stillOn = unlimited ? [] : others;
-    update(e, { Status: 'Signed Up', 'Response At': nowIso }, confirmationEmail(removed, stillOn),
+    update(e, { Status: 'Signed Up', 'Response At': nowIso }, confirmationEmail(e, signupUrl, { removedOthers: removed.length > 0, stillOn: stillOn.length > 0 }),
       logRow(e, 'Signed Up', { Source: e.source || 'Auto', Detail: signupUrl ? '' : 'SIGNUP URL MISSING — send the link manually' }));
     for (const o of removed) {
       update(o, { Status: 'Removed', Reason: `Auto-removed: signed up for ${e.membership} at ${e.location}` }, null, logRow(o, 'Removed', { Detail: 'Signed up for Unlimited elsewhere' }));
@@ -132,13 +111,18 @@ switch (action) {
     return [{ json: { status: 200, page: redirectPage(signupUrl, 'Taking you to signup', 'Your spot is confirmed — taking you to signup and payment.'), actions: acts } }];
   }
   case 'tour': {
-    if (e.status === 'Tour Requested') return reply(200, 'Tour already requested', '<p>We already have your tour request and your spot is held. We\'ll be in touch shortly.</p>');
+    if (e.status === 'Tour Requested') {
+      if (calUrl) return toCalendar('Pick your tour time', 'Your spot is still held. Taking you to pick or change your tour time.', []);
+      return reply(200, 'Tour already requested', '<p>We already have your tour request and your spot is held. We\'ll be in touch shortly.</p>');
+    }
     if (onTime) {
       update(e, { Status: 'Tour Requested', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(false), logRow(e, 'Tour Requested', { Reason: note }));
+      if (calUrl) return toCalendar('Pick your tour time', `Your ${q} spot is held for you. Taking you to pick a tour time.`);
       return reply(200, 'Tour requested', `<p>Thanks — we'll be in touch to arrange your tour. Your ${esc(q)} spot is held for you in the meantime.</p>`, acts);
     }
     update(e, { Status: 'Warm', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(true), logRow(e, 'Late Reply', { Reason: note, Detail: declined ? `Asked for a tour after answering "${e.status}" → Warm` : 'Asked for a tour after the hold expired → Warm' }));
     const lead = declined ? `Because you'd told us you weren't ready, your ${esc(q)} spot went to the next person.` : `Your hold on the ${esc(q)} passed before we heard back, so it has gone to the next person.`;
+    if (calUrl) return reply(200, 'You can still book a tour', `<p>${lead} You're now <strong>first in line</strong> for the next spot.</p><p>You're still welcome to come and see the space:</p><a class="button" href="${esc(calUrl)}">Choose a tour time</a>`, acts);
     return reply(200, 'Thanks — we\'ll be in touch', `<p>${lead} You're now <strong>first in line</strong> for the next spot, and our team will reach out about a tour.</p>`, acts);
   }
   case 'notnow':

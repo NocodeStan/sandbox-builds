@@ -30,7 +30,7 @@ export function createMockServices({ pageSize = 100, lockoutMs = 0 } = {}) {
       else if (c === '&') js += '+';
       else js += c;
     }
-    const fn = new Function('F', 'AND', 'OR', 'NOT', 'LOWER', 'NOW', 'DATEADD', 'IS_AFTER', 'TRUE', 'FALSE', `return (${js});`);
+    const fn = new Function('F', 'AND', 'OR', 'NOT', 'LOWER', 'NOW', 'DATEADD', 'IS_AFTER', 'TRUE', 'FALSE', 'RECORD_ID', `return (${js});`);
     const UNIT = { days: 86400000, hours: 3600000, minutes: 60000 };
     return (rec) => fn(
       (name) => rec.fields[name] ?? '',
@@ -38,6 +38,7 @@ export function createMockServices({ pageSize = 100, lockoutMs = 0 } = {}) {
       (s) => String(s ?? '').toLowerCase(), () => new Date(),
       (d, n, u) => new Date(new Date(d).getTime() + n * UNIT[u]),
       (a, b) => (a ? new Date(a) > new Date(b) : false), () => true, () => false,
+      () => rec.id,
     );
   }
 

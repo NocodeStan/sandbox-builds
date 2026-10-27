@@ -40,7 +40,20 @@ function normEntry(r) {
     primedAt: toDate(f['Primed At']),
     responseAt: toDate(f['Response At']),
     tourNotes: f['Tour Notes'] || '',
+    tourAt: toDate(f['Tour At']),
   };
+}
+
+// Cal.com booking page for this person's location (blank if none is set), pre-filled with their name
+// and email, and tagged with their row ID so the booking notification can be matched back to them.
+function tourBookingUrl(e) {
+  const base = String((CFG.tourBookingUrlByLocation || {})[e.location] || '').trim();
+  if (!base) return '';
+  const params = [['name', e.name], ['email', e.email], ['metadata[entry]', e.id]]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  return `${base}${base.includes('?') ? '&' : '?'}${params}`;
 }
 
 function logRow(e, event, extra = {}) {

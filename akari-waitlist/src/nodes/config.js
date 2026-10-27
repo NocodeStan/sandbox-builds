@@ -20,6 +20,11 @@ const cfg = {
   membershipPageUrl: 'https://www.akarisauna.com/membership', // same for every location
   priceByTier: { Unlimited: 220, Daytime: 165, '4-Visit': 140 }, // $/month; no "Summer Pass" price yet — update when it's live on the form
 
+  // Tours: "Tour first" sends people to their location's Cal.com page. Blank = the old "when suits you?" box.
+  tourBookingUrlByLocation: { Williamsburg: '', Greenpoint: '', 'Lower East Side': '' }, // e.g. 'https://cal.com/akari/williamsburg-tour'
+  tourReleaseHours: 48, // a tour hold is released this long after the booked tour, unless a sign-up link was sent
+  calWebhookSecret: 'CHANGE-ME', // long random string; goes on the end of the Cal.com webhook URL (?k=...)
+
   // Safety switches — leave as-is until testing is signed off
   engineEnabled: true, // false = the hourly engine does nothing (webhooks still work)
   sandboxMode: true, // true = SendGrid accepts but delivers nothing
@@ -36,7 +41,6 @@ const cfg = {
   warmCooldownHours: 72, // a timed-out person is first in line again after this
   timeoutsBeforeNoReply: 2, // 1st timeout → Warm, 2nd → No Reply bucket
   maxInvitesPerQueuePerRun: 10, // guardrail against a mistyped minimum
-  tourStaleDays: 7, // tour holds older than this are flagged in the daily report
 };
 
 const base = `${cfg.airtableApi}/${cfg.airtableBaseId}`;

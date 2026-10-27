@@ -54,7 +54,7 @@ Each one is a single setting or a small code change if they want it different.
 
 | # | What I built | Why | Change it via |
 |---|---|---|---|
-| A1 | **"I'd like a tour first"** is a 4th response. It holds the spot with no expiry, alerts the team, and staff press **Send Now** after the tour. Tour holds older than 7 days are flagged in the daily report. | The 24 Sep note says tours are *the* reason for the hold. Without this, a tour request would time out after 24h and the spot would move on. | `tourStaleDays`; remove the button in `src/helpers/email.js` |
+| A1 | **"I'd like a tour first"** is a 4th response. It holds the spot, alerts the team and (27 Oct) sends the candidate to their location's **Cal.com** page. The hold is released **48h after the booked tour** unless staff press **Send Sign-up Link** first; requests with no tour booked after a day are flagged in the daily report. | The 24 Sep note says tours are *the* reason for the hold. 27 Oct: Jack asked for Cal.com booking and a release rule; staff take over after the tour. | `tourBookingUrlByLocation`, `tourReleaseHours` |
 | A2 | "1 new ≈ 3 upgrades" is applied as **weighted waiting time**: a new member's days waiting count 3×. | Keeps oldest-first fairness while tilting toward new members. | `newMemberWeight` (e.g. `1000` = new members always first) |
 | A3 | **Manual Rank beats everything**, including Warm people. | Explicit staff intent should win. | `src/nodes/plan-engine-actions.js` sort |
 | A4 | 1st missed window → **Warm**, first in line again after a **72h** cool-off. 2nd miss → **No Reply** bucket. | This is how I read the diagram's "Warm → next time a spot opens → No-reply bucket" arrow. The cool-off stops the engine re-inviting the same person for the same spot an hour later. | `warmCooldownHours`, `timeoutsBeforeNoReply` |
@@ -101,12 +101,12 @@ flowchart LR
 | Waiting | Intake / staff | Primed or Invited |
 | Primed | Engine (heads-up sent) | Invited |
 | Invited | Engine or Send Now (48h hold) | Signed Up · Tour Requested · Not Right Now · No Longer Interested · Warm (timeout) |
-| Tour Requested | Candidate | Staff Send Now after the tour → Invited, or staff edit |
+| Tour Requested | Candidate | Staff **Send Sign-up Link** → Signed Up; or released to Not Right Now 48h after the booked tour |
 | Warm | 1st timeout or late reply | Re-invited first (after 72h cool-off unless they replied late) |
 | No Reply | 2nd timeout | Staff / future campaign |
-| Not Right Now | Candidate | Staff follow-up (no auto re-invite) |
+| Not Right Now | Candidate, or a released tour hold | Staff follow-up (no auto re-invite) |
 | No Longer Interested | Candidate | Closed |
-| Signed Up | Candidate clicked Yes | Closed |
+| Signed Up | Candidate clicked Yes, or staff pressed Send Sign-up Link | Closed |
 | Removed | Unlimited signup elsewhere, or "remove me from other lists" | Closed |
 
 ---
@@ -135,6 +135,11 @@ flowchart LR
      ```
      "https://YOUR-N8N-HOST/webhook/akari-waitlist/send-now?id=" & RECORD_ID() & "&k=YOUR-SEND-NOW-SECRET"
      ```
+   - **Waitlist › `Send Sign-up Link`**: *Button* → *Open URL*, same secret:
+     ```
+     "https://YOUR-N8N-HOST/webhook/akari-waitlist/send-signup?id=" & RECORD_ID() & "&k=YOUR-SEND-NOW-SECRET"
+     ```
+   - **A "Line" view** on Waitlist (views can't be created through the API): filter *Status is any of Waiting, Primed, Warm*; group by *Location*, then *Membership*; sort by **Priority Score**, 9→1. That's the order the engine works through. The script creates Priority Score; if Airtable refuses, it prints the formula to paste.
 4. Fill in each Capacity row you'll use: `Minimum Members`, `Active Members`, `Signup URL`, then tick **Enabled** only when you're ready. Queues with no Signup URL never send invites.
 5. Migrate the current Excel waitlist: CSV-import into **Waitlist** with `Status = Waiting`, the original date in `Joined At`, `Entry Source = Admin`, and `Member Type = Existing` for upgrades and switches.
 
@@ -169,12 +174,23 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 | `sendNowSecret` | A long random string. Must match the Airtable button formula. Until you change it from `CHANGE-ME`, Send Now is refused. |
 | `sandboxMode` | Leave `true` until Stage 2 of testing |
 | `testRecipient` | Your own inbox for Stage 2, then `''` |
+| `allowedRecipients` | While `testRecipient` is set, these get their email for real: `'name@x.com'` (also matches `name+2@x.com`) or `'@domain.com'` |
+| `tourBookingUrlByLocation` | Each location's Cal.com booking page. Blank = the old "when suits you?" box for that location |
+| `tourReleaseHours` | How long after the booked tour the hold is released (48) |
+| `calWebhookSecret` | A long random string. It goes on the end of the Cal.com webhook URL (§4.7) |
 
 4. Workflow **Settings** → *Error workflow* → **Akari Waitlist · Error Alert**. Check the timezone is America/New_York (it's already set in the JSON).
 5. **Publish** (2.x) / **Activate** (1.x). The email links point at production webhook URLs, so response flows only work on a published workflow.
 
 ### 4.6 Typeform
 Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/akari-waitlist/intake` and switch it on. The parser finds fields by type and by matching choice labels, so question wording can change freely. The **choice labels** must still contain the location names (Williamsburg, Greenpoint, Lower East Side/LES) and membership names (Unlimited, Daytime, 4-Visit, Summer Pass) — a label meaning more than one location (e.g. "All-Access (both locations)") is matched as an alias and enrols the person in every location it covers; see `LOCATION_ALIASES` in Parse Typeform to add another. A yes/no question containing "existing … member" sets Member Type automatically. A short-text question containing "zip"/"postal" or "how … hear … about" is captured into `Zip Code` / `Referral Source`, logged but not otherwise used by the automation.
+
+---
+
+### 4.7 Cal.com
+1. One booking page (event type) per location. Put each link in `tourBookingUrlByLocation`.
+2. Cal.com → **Settings → Developer → Webhooks → New**: Subscriber URL `https://<your-n8n-host>/webhook/akari-waitlist/tour-booking?k=<calWebhookSecret>`, events **Booking Created**, **Booking Rescheduled**, **Booking Cancelled**. Leave the payload template as default.
+3. The candidate's name and email are pre-filled from the link, and the link carries their Airtable row ID, so each booking lands on the right row as **Tour At**. A booking made outside the email link is matched by email to a row that's waiting for a tour. If you arrange a tour by phone, type the time into **Tour At** yourself; the 48h release works the same way.
 
 ---
 
@@ -233,6 +249,21 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 | Build Send Now | Code | Fresh 48h invite whatever the status, position or queue count. Ignores a second click within 2 minutes. The page warns if test or sandbox mode is on. |
 | Forbidden Page | Code | 403 page. |
 
+### Lane 6 · Send Sign-up Link (staff)
+| Node | Type | What it does |
+|---|---|---|
+| Send Sign-up Link Authorised? | IF | Same check as Send Now. |
+| Get Entry for Send Sign-up Link · Find Entries by Email (sign-up link) · Find Queue Settings (sign-up link) | HTTP GET Airtable | The row, the person's other rows, and the queue's Signup URL. |
+| Build Send Sign-up Link | Code | Sends Jack's confirmation email with the private sign-up link and marks the row Signed Up (log source: Admin). Unlimited also removes them from their other waitlists. Refuses with a clear page if the queue has no Signup URL; ignores a second click within 2 minutes; on someone already Signed Up it only re-sends the email. |
+
+### Lane 7 · Cal.com tour bookings
+| Node | Type | What it does |
+|---|---|---|
+| Cal.com Webhook Authorised? | IF | `?k=` matches `calWebhookSecret` (and it isn't still `CHANGE-ME`). |
+| Read Cal.com Booking | Code | Pulls the event, start time, row ID and email out of the webhook and builds the lookup. |
+| Find Entry for Tour Booking | HTTP GET Airtable | The row by ID, or by email among rows waiting for a tour. |
+| Build Tour Booking | Code | Booked or moved → writes **Tour At** and logs Tour Booked. Cancelled → clears it (the spot stays held) and logs Tour Cancelled. Anything else is ignored. |
+
 ### Executor (shared)
 | Node | Type | What it does |
 |---|---|---|
@@ -262,7 +293,7 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 
 **Stage 0 · Automated (no accounts needed)**
 ```bash
-npm test          # 63 business-rule tests
+npm test          # 82 business-rule tests
 # End-to-end in a real n8n (needs Node 24 + an n8n install):
 NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run e2e
 # Client UAT: "a week at Akari" from Jack's seat, ~15 min (see §13)
@@ -299,14 +330,15 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 
 ## 7. Go-live checklist
 - [ ] SendGrid domain authenticated; a test invite lands in Gmail and Outlook inboxes
-- [ ] `sandboxMode: false`, `testRecipient: ''`, `sendNowSecret` changed and matching the Airtable button
+- [ ] `sandboxMode: false`, `testRecipient: ''`, `sendNowSecret` changed and matching both Airtable buttons
+- [ ] Cal.com links in `tourBookingUrlByLocation`; Cal.com webhook pointing at `…/tour-booking?k=<calWebhookSecret>`
 - [ ] Error workflow published and linked; a test failure produced an email
 - [ ] Every enabled queue has Minimum, Active, **Signup URL**
 - [ ] Legacy Excel waitlist imported with original `Joined At` dates
 - [ ] Staff briefed on the runbook (§9)
 
 ## 8. Airtable schema (manual build)
-**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes · Notes (long text) · Send Now (button).
+**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes (long text) · Tour At (date-time) · Notes (long text) · Priority Score (formula, see `airtable/setup-airtable.mjs`) · Send Now (button) · Send Sign-up Link (button).
 
 **Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL).
 
@@ -316,7 +348,8 @@ Date-time fields: time zone America/New_York.
 
 ## 9. Runbook for the Akari team
 - **After each recount in Glofox**, update `Active Members`. This also clears "pending signups" from the maths.
-- **Tour Requested**: book the tour; afterwards press **Send Now** (sends the signup link with a fresh 48h hold), or set the status by hand.
+- **Tour Requested**: the candidate books through Cal.com and the time appears in **Tour At**. After the tour, press **Send Sign-up Link** if they want to join. If nothing is sent, the hold is released 48h after the tour and they move to Not Right Now (the daily summary lists them).
+- **Who's next?** Open the **Line** view: each queue is sorted by Priority Score, highest first.
 - **Not Right Now**: follow up by hand; press Send Now when they're ready.
 - **Reorder**: type a number in `Manual Rank` (1 = next). Clear it to go back to the rules.
 - **Pause everything**: set `engineEnabled: false` in Config. Links and Send Now keep working.

@@ -36,7 +36,7 @@ const SELECTS = {
     'Invite Source': ['Auto', 'Send Now'],
   },
   'Activity Log': {
-    Event: ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed'],
+    Event: ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released'],
   },
 };
 
@@ -330,7 +330,7 @@ try {
   expect('team alert: "Tour Request: Ava Romero at Akari Williamsburg"', () => eq(tourMail?.subject, 'Tour Request: Ava Romero at Akari Williamsburg'));
   expect('alert lists email, phone, waitlist date and preferred times', () => has(textOf(tourMail), /stan\+11@optimizewise\.org[\s\S]*\+17185550111[\s\S]*On the waitlist since[\s\S]*Weekday evenings after 6/));
   expect('alert reads naturally: "committing to an Unlimited membership"', () => has(textOf(tourMail), /committing to an Unlimited membership/));
-  expect('alert tells staff exactly what to do after the tour (Send Now)', () => has(textOf(tourMail), /Send Now/));
+  expect('alert tells staff exactly what to do after the tour (Send Sign-up Link)', () => has(textOf(tourMail), /Send Sign-up Link/));
 
   scenario('R3', 'Noor is not ready yet', 'Noor clicks "Not ready yet" and writes "Back in town in November".');
   r = await confirm(inv(at(5)), 'notnow', 'Back in town in November');
@@ -499,7 +499,7 @@ try {
   await post('test-report', {});
   await settle();
   rep = mails().slice(mark).find((m) => toOf(m).includes(TEAM));
-  expect('flags Maya\'s tour hold as stale (over 7 days)', () => has(htmlOf(rep), /Maya Chen \(Unlimited at Williamsburg\) has had a tour hold since/));
+  expect('flags Maya\'s tour request: no tour time booked, spot still held', () => has(htmlOf(rep), /Maya Chen \(Unlimited at Williamsburg\) asked for a tour on .* has no tour time booked yet/));
   expect('flags Greenpoint Summer Pass: open spot, nobody left to invite', () => has(htmlOf(rep), /Greenpoint · Summer Pass: 1 open spot\(s\) but nobody left on the waitlist/));
   expect('lists "Not ready yet" people due a check-in (Noor)', () => has(htmlOf(rep), /Noor/), 'decision');
 

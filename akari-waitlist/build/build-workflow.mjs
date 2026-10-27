@@ -110,11 +110,14 @@ export const F_ACTIVE = `OR({Status}="Waiting",{Status}="Primed",{Status}="Invit
 const tokenFormula = (src) =>
   `={{ '{Invite Token}="' + (String(($('Config').first().json.${src} || {}).t || '').replace(/[^A-Za-z0-9]/g, '') || 'NO_TOKEN') + '"' }}`;
 const TOKEN_REC = `(($('Find Entry by Token (commit)').first().json.records || [])[0] || { fields: {} }).fields`;
+const SIGNUP_REC = `($('Get Entry for Send Sign-up Link').first().json.fields || {})`;
+// Staff buttons in Airtable carry the record ID and the Send Now secret.
+const STAFF_KEY_OK = `!!$json.cfg.sendNowSecret && $json.cfg.sendNowSecret !== 'CHANGE-ME' && ($json.query || {}).k === $json.cfg.sendNowSecret && /^rec[A-Za-z0-9]{14}$/.test(($json.query || {}).id || '')`;
 const safe = (expr) => `String(${expr} || '').replace(/["\\\\]/g, '')`;
 
 // ── Layout ──────────────────────────────────────────────────────
 const X = { trig: -260, ack: -20, route: 260, config: 520, sw: 780, l1: 1060, l2: 1300, l3: 1540, l4: 1780, l5: 2020 };
-const Y = { intake: -300, hourly: 40, manual: 200, glofox: 360, view: 560, commit: 760, sendnow: 1120, report: 1500 };
+const Y = { intake: -300, hourly: 40, manual: 200, glofox: 360, view: 560, commit: 760, sendnow: 1120, signup: 1520, tour: 1920, report: 2300 };
 const EX = {
   respond: 2300, unpack: 2540, queue: 2780, gen: 3020, apply: 3260, chunkUpd: 3500, pendUpd: 3740, update: 3980, checkUpd: 4220, ifUpd: 4460,
   chunkLog: 4700, pendLog: 4940, log: 5180, checkLog: 5420, ifLog: 5660, build: 5900, send: 6140,
@@ -130,7 +133,9 @@ export function buildMain() {
     sticky('Note: Engine', [1020, -60], 1640, 280, '### 2 · Engine (hourly)\nExpires 24h holds (1st miss → Warm, 2nd → No Reply) around the clock. From 08:00–20:00 it fills each queue\'s gap (Minimum − Active − pending signups − open holds) and sends the next ~10 an early heads-up.', 7),
     sticky('Note: Responses', [1020, 360], 1640, 540, '### 3 · Candidate response\nEmail buttons open a **confirmation page** (GET). Only the button on that page (POST) changes anything, so email link scanners can\'t accept or decline for someone.\nYes → Signed Up + signup link · Tour → spot held, team alerted · Not now / No → buckets · late reply → Warm.', 7),
     sticky('Note: Send Now', [1020, 940], 1640, 400, '### 4 · Send Now (staff override)\nAirtable button → invite this person now, whatever their position or the queue count. The button URL carries the record ID and the secret key from Config.', 7),
-    sticky('Note: Report', [1020, 1380], 1640, 280, '### 5 · Daily report (07:30)\nInvited · signed up · not now · no longer interested (with reasons), conversion by location, queue snapshot, items needing attention.', 7),
+    sticky('Note: Sign-up Link', [1020, 1380], 1640, 360, '### 6 · Send Sign-up Link (staff, usually after a tour)\nAirtable button → email this person their private sign-up link and mark them Signed Up, as if they had pressed Sign up. Unlimited also takes them off their other waitlists. Same secret key as Send Now. Refuses if the queue has no Signup URL.', 7),
+    sticky('Note: Tour Booking', [1020, 1780], 1640, 360, '### 7 · Cal.com tour bookings\nCal.com webhook (booked / moved / cancelled) → writes **Tour At** on the waitlist row, matched by the row ID on the booking link, else by email. The engine releases the hold `tourReleaseHours` after the tour unless a sign-up link was sent. The webhook URL ends in `?k=` + `calWebhookSecret`.', 7),
+    sticky('Note: Report', [1020, 2180], 1640, 280, '### 5 · Daily report (07:30)\nInvited · signed up · not now · no longer interested (with reasons), conversion by location, queue snapshot, items needing attention.', 7),
     sticky('Note: Executor', [2740, 560], 3640, 360, '### Executor\nCarries out every planned action in a safe order: **0)** swap in secure random response tokens → **1)** update Waitlist rows → **2)** write Activity Log → **3)** send emails. Writes go 10 rows per request, ≥500ms apart, to stay under Airtable\'s 5 requests/second limit. If Airtable still refuses a batch (it locks the base for 30s after a burst), only the refused batches wait 35s and are resent, up to 4 attempts, before the error alert fires. No email goes out until its rows are saved.', 6),
 
     // Triggers
@@ -141,6 +146,8 @@ export function buildMain() {
     webhook('Candidate Opens Link', [X.trig, Y.view], 'GET', 'akari-waitlist/respond', 'responseNode'),
     webhook('Candidate Confirms', [X.trig, Y.commit], 'POST', 'akari-waitlist/respond-confirm', 'responseNode'),
     webhook('Airtable: Send Now Button', [X.trig, Y.sendnow], 'GET', 'akari-waitlist/send-now', 'responseNode'),
+    webhook('Airtable: Send Sign-up Link Button', [X.trig, Y.signup], 'GET', 'akari-waitlist/send-signup', 'responseNode'),
+    webhook('Cal.com: Tour Booking', [X.trig, Y.tour], 'POST', 'akari-waitlist/tour-booking', 'responseNode'),
     cron('Daily Report 7:30am', [X.trig, Y.report], '30 7 * * *'),
 
     // n8n requires every webhook here to answer via a Respond node (a Respond node sits downstream of the shared router).
@@ -153,10 +160,12 @@ export function buildMain() {
     route('Route: Response Commit', [X.route, Y.commit], 'commit'),
     route('Route: Send Now', [X.route, Y.sendnow], 'sendnow'),
     route('Route: Report', [X.route, Y.report], 'report'),
+    route('Route: Send Sign-up Link', [X.route, Y.signup], 'sendsignup'),
+    route('Route: Tour Booking', [X.route, Y.tour], 'tourbooking'),
     code('Config', [X.config, Y.view], 'config'),
     node('Route', 'n8n-nodes-base.switch', 3.2, [X.sw, Y.view], {
       rules: {
-        values: [['intake', 'Intake'], ['engine', 'Engine'], ['view', 'Response View'], ['commit', 'Response Commit'], ['sendnow', 'Send Now'], ['report', 'Report']].map(([v, label]) => ({
+        values: [['intake', 'Intake'], ['engine', 'Engine'], ['view', 'Response View'], ['commit', 'Response Commit'], ['sendnow', 'Send Now'], ['report', 'Report'], ['sendsignup', 'Send Sign-up Link'], ['tourbooking', 'Tour Booking']].map(([v, label]) => ({
           conditions: cond(`route:${v}`, '={{ $json.route }}', { type: 'string', operation: 'equals' }, v),
           renameOutput: true,
           outputKey: label,
@@ -196,8 +205,7 @@ export function buildMain() {
     code('Decide Response', [X.l4, Y.commit], 'decide-response', { executeOnce: true }),
 
     // 4 · Send Now
-    ifTrue('Send Now Authorised?', [X.l1, Y.sendnow],
-      `$json.cfg.sendNowSecret !== 'CHANGE-ME' && ($json.query || {}).k === $json.cfg.sendNowSecret && /^rec[A-Za-z0-9]{14}$/.test(($json.query || {}).id || '')`),
+    ifTrue('Send Now Authorised?', [X.l1, Y.sendnow], STAFF_KEY_OK),
     node('Get Entry for Send Now', 'n8n-nodes-base.httpRequest', 4.2, [X.l2, Y.sendnow - 40], {
       url: `={{ ${CFG('urls.waitlist')} }}/{{ $('Config').first().json.query.id }}`,
       authentication: 'genericCredentialType',
@@ -206,6 +214,27 @@ export function buildMain() {
     }, { credentials: CREDS.airtable, ...RETRY }),
     code('Build Send Now', [X.l3, Y.sendnow - 40], 'build-send-now'),
     code('Forbidden Page', [X.l2, Y.sendnow + 120], 'forbidden-page'),
+
+    // 6 · Send Sign-up Link
+    ifTrue('Send Sign-up Link Authorised?', [X.l1, Y.signup], STAFF_KEY_OK),
+    node('Get Entry for Send Sign-up Link', 'n8n-nodes-base.httpRequest', 4.2, [X.l2, Y.signup - 40], {
+      url: `={{ ${CFG('urls.waitlist')} }}/{{ $('Config').first().json.query.id }}`,
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      options: { response: { response: { neverError: true } } },
+    }, { credentials: CREDS.airtable, ...RETRY }),
+    airtableGet('Find Entries by Email (sign-up link)', [X.l3, Y.signup - 40], 'waitlist',
+      `={{ 'LOWER({Email})="' + ${safe(`${SIGNUP_REC}.Email`)}.toLowerCase() + '"' }}`, { executeOnce: true, paginate: false, candidate: true }),
+    airtableGet('Find Queue Settings (sign-up link)', [X.l4, Y.signup - 40], 'capacity',
+      `={{ 'AND({Location}="' + ${safe(`${SIGNUP_REC}.Location`)} + '",{Membership}="' + ${safe(`${SIGNUP_REC}.Membership`)} + '")' }}`, { executeOnce: true, paginate: false, candidate: true }),
+    code('Build Send Sign-up Link', [X.l5, Y.signup - 40], 'build-send-signup', { executeOnce: true }),
+
+    // 7 · Cal.com tour bookings
+    ifTrue('Cal.com Webhook Authorised?', [X.l1, Y.tour],
+      `!!$json.cfg.calWebhookSecret && $json.cfg.calWebhookSecret !== 'CHANGE-ME' && ($json.query || {}).k === $json.cfg.calWebhookSecret`),
+    code('Read Cal.com Booking', [X.l2, Y.tour - 40], 'read-tour-booking'),
+    airtableGet('Find Entry for Tour Booking', [X.l3, Y.tour - 40], 'waitlist', `={{ $('Read Cal.com Booking').first().json.formula }}`, { paginate: false }),
+    code('Build Tour Booking', [X.l4, Y.tour - 40], 'build-tour-booking', { executeOnce: true }),
 
     // Shared response + executor
     node('Respond with Page', 'n8n-nodes-base.respondToWebhook', 1.1, [EX.respond, EXY], {
@@ -260,6 +289,8 @@ export function buildMain() {
     'Candidate Opens Link': { main: [to('Route: Response View')] },
     'Candidate Confirms': { main: [to('Route: Response Commit')] },
     'Airtable: Send Now Button': { main: [to('Route: Send Now')] },
+    'Airtable: Send Sign-up Link Button': { main: [to('Route: Send Sign-up Link')] },
+    'Cal.com: Tour Booking': { main: [to('Route: Tour Booking')] },
     'Daily Report 7:30am': { main: [to('Route: Report')] },
     'Route: Intake': { main: [to('Config')] },
     'Route: Engine': { main: [to('Config')] },
@@ -267,6 +298,8 @@ export function buildMain() {
     'Route: Response Commit': { main: [to('Config')] },
     'Route: Send Now': { main: [to('Config')] },
     'Route: Report': { main: [to('Config')] },
+    'Route: Send Sign-up Link': { main: [to('Config')] },
+    'Route: Tour Booking': { main: [to('Config')] },
     Config: { main: [to('Route')] },
     Route: {
       main: [
@@ -276,6 +309,8 @@ export function buildMain() {
         to('Find Entry by Token (commit)'),
         to('Send Now Authorised?'),
         to('Get Log (30 days)'),
+        to('Send Sign-up Link Authorised?'),
+        to('Cal.com Webhook Authorised?'),
       ],
     },
     'Parse Typeform': { main: [to('Find Existing Entries')] },
@@ -297,6 +332,15 @@ export function buildMain() {
     'Get Entry for Send Now': { main: [to('Build Send Now')] },
     'Build Send Now': { main: [to('Respond with Page')] },
     'Forbidden Page': { main: [to('Respond with Page')] },
+    'Send Sign-up Link Authorised?': { main: [to('Get Entry for Send Sign-up Link'), to('Forbidden Page')] },
+    'Get Entry for Send Sign-up Link': { main: [to('Find Entries by Email (sign-up link)')] },
+    'Find Entries by Email (sign-up link)': { main: [to('Find Queue Settings (sign-up link)')] },
+    'Find Queue Settings (sign-up link)': { main: [to('Build Send Sign-up Link')] },
+    'Build Send Sign-up Link': { main: [to('Respond with Page')] },
+    'Cal.com Webhook Authorised?': { main: [to('Read Cal.com Booking'), to('Forbidden Page')] },
+    'Read Cal.com Booking': { main: [to('Find Entry for Tour Booking')] },
+    'Find Entry for Tour Booking': { main: [to('Build Tour Booking')] },
+    'Build Tour Booking': { main: [to('Respond with Page')] },
     'Respond with Page': { main: [to('Unpack Actions')] },
     'Unpack Actions': { main: [to('Action Queue')] },
     'Action Queue': { main: [to('Generate Tokens')] },

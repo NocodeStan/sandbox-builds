@@ -81,7 +81,8 @@ test('Tour within the hold → Tour Requested (spot stays held), team alerted wi
   assert.equal(a.fields['Tour Notes'], 'Saturday morning');
   assert.deepEqual(a.email.to, ['team@akari.test']);
   assert.match(a.email.text, /Saturday morning/);
-  assert.match(a.email.text, /Send Now/);
+  assert.match(a.email.text, /Send Sign-up Link/);
+  assert.match(a.email.text, /Please reach out within 1 business day/, 'no Cal.com link configured → the team books it');
   assert.match(a.email.text, /committing to an Unlimited membership/);
 });
 

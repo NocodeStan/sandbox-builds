@@ -18,6 +18,8 @@ const headline = [
   ['Invited (Send Now)', count(today, 'Invited', 'Send Now')],
   ['Signed up', count(today, 'Signed Up')],
   ['Tour requested', count(today, 'Tour Requested')],
+  ['Tours booked', count(today, 'Tour Booked')],
+  ['Tour holds released', count(today, 'Tour Released')],
   ['Not right now', count(today, 'Not Right Now')],
   ['No longer interested', count(today, 'No Longer Interested')],
   ['Timed out', count(today, 'Timed Out')],
@@ -58,8 +60,11 @@ const queueRows = caps
     return [label, c.Enabled ? 'On' : 'Off', c['Minimum Members'] ?? 0, c['Active Members'] ?? 0, pending, holds, waiting, warm, Math.max(gap, 0)];
   });
 
-for (const e of live.filter((x) => x.status === 'Tour Requested' && x.responseAt && NOW - x.responseAt > CFG.tourStaleDays * DAY)) {
-  attention.push(`${e.name || e.email} (${e.membership} at ${e.location}) has had a tour hold since ${fmtTime(e.responseAt)}.`);
+for (const e of live.filter((x) => x.status === 'Tour Requested' && !x.tourAt && x.responseAt && NOW - x.responseAt > DAY)) {
+  attention.push(`${e.name || e.email} (${e.membership} at ${e.location}) asked for a tour on ${fmtTime(e.responseAt)} and has no tour time booked yet. Their spot is still held.`);
+}
+for (const f of today.filter((x) => x.Event === 'Tour Released')) {
+  attention.push(`${f.Name || f.Email} (${f.Membership} at ${f.Location}) toured, but no sign-up link was sent, so their spot was released. Follow up, or press Send Sign-up Link if they want to join.`);
 }
 for (const f of today.filter((x) => String(x.Detail || '').includes('SIGNUP URL MISSING'))) {
   attention.push(`${f.Email} signed up for ${f.Membership} at ${f.Location} but no signup link was configured — send it manually.`);

@@ -16,10 +16,10 @@ button,.button{display:block;width:100%;box-sizing:border-box;margin-top:18px;pa
 </style></head><body><main><div class="card"><p class="brand">${esc(CFG.brandName)}</p><h1>${esc(title)}</h1>${bodyHtml}</div></main></body></html>`;
 }
 
-function redirectPage(url, title, message) {
+function redirectPage(url, title, message, label = 'Continue to signup') {
   return htmlPage(
     title,
-    `<p>${esc(message)}</p><a class="button" href="${esc(url)}">Continue to signup</a>`,
+    `<p>${esc(message)}</p><a class="button" href="${esc(url)}">${esc(label)}</a>`,
     `<meta http-equiv="refresh" content="1;url=${esc(url)}">`,
   );
 }

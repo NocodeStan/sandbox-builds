@@ -69,6 +69,38 @@ Akari team`;
   return { to: e.email, name: e.name, subject: `${e.membership} Membership Now Available at Akari ${e.location}`, html, text };
 }
 
+// Jack's confirmation copy (template 2): the private Glofox sign-up link. Unlimited signups are told
+// they'll come off other waitlists; lower tiers stay on them, with a one-click way off.
+function confirmationEmail(e, signupUrl, { removedOthers = false, stillOn = false } = {}) {
+  const linkText = signupUrl || '(signup link pending — we\'ll send it shortly)';
+  const linkHtml = signupUrl ? `<a href="${esc(signupUrl)}" style="color:#1f1d1a">${esc(signupUrl)}</a>` : esc(linkText);
+  const leave = respondLink(e.token, 'leave');
+  const overlap = removedOthers
+    ? `<p>Once you sign up for your Unlimited membership, we'll automatically remove you from any other Akari waitlists you've joined.</p>`
+    : stillOn
+      ? `<p>You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: <a href="${esc(leave)}" style="color:#1f1d1a">${esc(leave)}</a></p>`
+      : '';
+  const html = emailLayout(`
+<p>Hi ${esc(firstName(e.name))},</p>
+<p>Thank you for your interest in joining Akari! Here is your private sign up link for your ${esc(e.membership)} membership at Akari ${esc(e.location)}: ${linkHtml}</p>
+${overlap}
+<p>Please let us know if you have any issues signing up!</p>
+<p>Warmly,<br>Akari team</p>`, `Your ${e.membership} membership is ready for you`);
+  const text = `Hi ${firstName(e.name)},
+
+Thank you for your interest in joining Akari! Here is your private sign up link for your ${e.membership} membership at Akari ${e.location}: ${linkText}
+
+${removedOthers
+    ? 'Once you sign up for your Unlimited membership, we\'ll automatically remove you from any other Akari waitlists you\'ve joined.'
+    : stillOn ? `You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: ${leave}` : ''}
+
+Please let us know if you have any issues signing up!
+
+Warmly,
+Akari team`;
+  return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for Akari ${e.location}`, html, text };
+}
+
 // Test mode (testRecipient set) redirects every email to that one inbox, except to people on
 // allowedRecipients, who get theirs for real. An entry is an address ('jack@x.com', which also
 // matches jack+2@x.com) or a whole domain ('@akarisauna.com').

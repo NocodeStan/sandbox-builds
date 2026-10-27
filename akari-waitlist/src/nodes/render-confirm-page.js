@@ -18,9 +18,12 @@ if (!rec || token.length < 16 || rec.fields['Invite Token'] !== token) {
 
 const e = normEntry(rec);
 const q = `${e.membership} membership at ${e.location}`;
+const calUrl = tourBookingUrl(e);
 const COPY = {
   yes: { title: 'Claim your spot', lead: `Confirm you'd like the <strong>${esc(q)}</strong>. We'll take you straight to signup and payment.`, button: 'Yes — continue to signup' },
-  tour: { title: 'Book a tour first', lead: `We'd love to show you around. Confirm below and we'll hold your <strong>${esc(q)}</strong> spot while we arrange a time.`, button: 'Request a tour', field: ['When suits you? (optional)', 'e.g. weekday evenings, Saturday morning'] },
+  tour: calUrl
+    ? { title: 'Book a tour first', lead: `We'd love to show you around. Confirm below and we'll hold your <strong>${esc(q)}</strong> spot, then take you to pick a tour time.`, button: 'Choose a tour time' }
+    : { title: 'Book a tour first', lead: `We'd love to show you around. Confirm below and we'll hold your <strong>${esc(q)}</strong> spot while we arrange a time.`, button: 'Request a tour', field: ['When suits you? (optional)', 'e.g. weekday evenings, Saturday morning'] },
   notnow: { title: 'Not right now', lead: `No problem — you'll stay on the waitlist for the <strong>${esc(q)}</strong>, and our team will be in touch.`, button: 'Keep me on the list', field: ['Anything we should know? (optional)', ''] },
   no: { title: 'Leave the waitlist', lead: `This removes you from the waitlist for the <strong>${esc(q)}</strong>.`, button: 'Remove me from the waitlist', field: ['Mind telling us why? (optional)', ''] },
   leave: { title: 'Leave your other waitlists', lead: 'This removes you from every other Akari waitlist you are on. Your new membership is not affected.', button: 'Remove me from the other waitlists' },
@@ -32,6 +35,7 @@ let note = '';
 const lapsed = (e.status === 'Invited' && e.expiresAt && NOW > e.expiresAt) || ['Warm', 'No Reply'].includes(e.status);
 if (e.status === 'Signed Up' && action !== 'leave') note = 'You have already claimed this spot.';
 else if (e.status === 'Removed') note = 'You are no longer on this waitlist.';
+else if (e.status === 'Tour Requested' && action === 'tour') note = 'You\'ve already asked for a tour, and your spot is held.';
 else if (['Not Right Now', 'No Longer Interested'].includes(e.status) && (action === 'yes' || action === 'tour')) note = 'You\'ve already told us you weren\'t ready, so this spot was released. If you continue, you\'ll be first in line for the next one.';
 else if (lapsed && (action === 'yes' || action === 'tour')) note = `Your ${CFG.holdHours}-hour hold has passed. If you continue, you'll be first in line for the next spot.`;
 else if (e.status === 'Invited' && e.expiresAt) note = `Your spot is held until ${esc(fmtTime(e.expiresAt))}.`;

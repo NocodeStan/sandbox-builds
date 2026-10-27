@@ -22,6 +22,9 @@ export async function waitFor(fn, label, ms = 30000) {
   }
 }
 
+export const CAL_SECRET = 'cal-secret-789';
+export const CAL_URL = 'https://cal.test/akari/williamsburg';
+
 export async function startStack({ port = Number(process.env.N8N_TEST_PORT) || 5678, mockPort = Number(process.env.MOCK_TEST_PORT) || 4010, secret = 'e2e-secret-123', wfId = 'akariWaitlistE2E1', lockoutMs = 0 } = {}) {
   const NODE = process.env.NODE24 || process.execPath;
   const N8N = process.env.N8N_BIN;
@@ -59,6 +62,8 @@ export async function startStack({ port = Number(process.env.N8N_TEST_PORT) || 5
     ["sendNowSecret: 'CHANGE-ME'", `sendNowSecret: '${secret}'`],
     ['sendWindow: { startHour: 8, endHour: 20 }', 'sendWindow: { startHour: 0, endHour: 24 }'],
     ['sandboxMode: true', 'sandboxMode: false'],
+    ["calWebhookSecret: 'CHANGE-ME'", `calWebhookSecret: '${CAL_SECRET}'`],
+    ["tourBookingUrlByLocation: { Williamsburg: ''", `tourBookingUrlByLocation: { Williamsburg: '${CAL_URL}'`],
   ];
   for (const [from, to] of swaps) {
     assert.ok(config.parameters.jsCode.includes(from), `Config is missing ${from}`);

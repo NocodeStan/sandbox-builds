@@ -23,7 +23,7 @@ if (!TOKEN || (!BASE && !WORKSPACE)) {
 const LOCATIONS = ['Williamsburg', 'Greenpoint', 'Lower East Side'];
 const MEMBERSHIPS = ['Unlimited', 'Daytime', '4-Visit', 'Summer Pass'];
 const STATUSES = ['Waiting', 'Primed', 'Invited', 'Tour Requested', 'Warm', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'No Reply', 'Removed'];
-const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed'];
+const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released'];
 
 const select = (names) => ({ type: 'singleSelect', options: { choices: names.map((name) => ({ name })) } });
 const dateTime = { type: 'dateTime', options: { timeZone: 'America/New_York', dateFormat: { name: 'iso' }, timeFormat: { name: '24hour' } } };
@@ -45,7 +45,7 @@ const TABLES = [
       ['Invite Token', text], ['Invited At', dateTime], ['Invite Expires At', dateTime],
       ['Invite Source', select(['Auto', 'Send Now'])], ['Timeout Count', integer],
       ['Primed At', dateTime], ['Response At', dateTime],
-      ['Reason', long], ['Tour Notes', long], ['Notes', long],
+      ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Notes', long],
     ],
   },
   {
@@ -94,10 +94,17 @@ if (!BASE) {
   createdCapacity = true;
   console.log(`✓ created base "${BASE_NAME}" (${BASE}) with ${TABLES.map((t) => t.name).join(', ')}`);
 } else {
-  const existing = new Set((await api('GET', `meta/bases/${BASE}/tables`)).tables.map((t) => t.name));
+  const existing = new Map((await api('GET', `meta/bases/${BASE}/tables`)).tables.map((t) => [t.name, t]));
   for (const t of TABLES) {
     if (existing.has(t.name)) {
-      console.log(`• ${t.name}: already exists, skipped`);
+      // Upgrade an existing table: add any fields it's missing (e.g. Waitlist › Tour At).
+      const have = new Set(existing.get(t.name).fields.map((f) => f.name));
+      const missing = t.fields.filter(([name]) => !have.has(name));
+      for (const [name, spec] of missing) {
+        await api('POST', `meta/bases/${BASE}/tables/${existing.get(t.name).id}/fields`, { name, ...spec });
+        console.log(`✓ added ${t.name} › ${name}`);
+      }
+      if (!missing.length) console.log(`• ${t.name}: already up to date`);
       continue;
     }
     await api('POST', `meta/bases/${BASE}/tables`, toSpec(t));
@@ -115,6 +122,24 @@ if (!capTable.fields.some((f) => f.name === 'Active Updated At')) {
   console.log('✓ created Capacity › Active Updated At (watches Active Members)');
 }
 
+// "Priority Score" mirrors the engine's order so a view can show the live line: manual rank first,
+// then Warm, then days waited (new members count x3, as newMemberWeight in Config). Blank = not in line.
+const PRIORITY_FORMULA = `IF(OR({Status}="Waiting",{Status}="Primed",{Status}="Warm"),
+  IF({Manual Rank}, 1000000000 - {Manual Rank} * 1000000, 0)
+  + IF({Status}="Warm", 1000000, 0)
+  + ROUND(DATETIME_DIFF(NOW(), {Joined At}, 'hours') / 24 * IF({Member Type}="Existing", 1, 3), 1))`;
+const waitTable = (await api('GET', `meta/bases/${BASE}/tables`)).tables.find((t) => t.name === 'Waitlist');
+if (!waitTable.fields.some((f) => f.name === 'Priority Score')) {
+  try {
+    await api('POST', `meta/bases/${BASE}/tables/${waitTable.id}/fields`, {
+      name: 'Priority Score', type: 'formula', description: 'Higher = closer to the front. Sort a view by this, descending, to see the line.', options: { formula: PRIORITY_FORMULA },
+    });
+    console.log('✓ created Waitlist › Priority Score');
+  } catch (err) {
+    console.log(`! Airtable didn't accept the Priority Score formula field through the API (${err.message.slice(0, 120)}).\n  Add it by hand: Waitlist → + → Formula → name "Priority Score" → paste:\n${PRIORITY_FORMULA}\n`);
+  }
+}
+
 if (createdCapacity) {
   const rows = LOCATIONS.flatMap((Location) => MEMBERSHIPS.map((Membership) => ({
     fields: { Queue: `${Location} · ${Membership}`, Location, Membership, 'Minimum Members': 0, 'Active Members': 0, Enabled: false },
@@ -127,4 +152,4 @@ if (createdCapacity) {
 }
 
 console.log(`\nBase ID for the n8n Config node: ${BASE}`);
-console.log('Next: add the "Send Now" button to Waitlist (BUILD-GUIDE.md §4.2).');
+console.log('Next (by hand, BUILD-GUIDE.md §4.2): add the "Send Now" and "Send Sign-up Link" buttons to Waitlist, and the "Line" view.');

@@ -39,6 +39,20 @@ for (const e of entries) {
   }
 }
 
+// 1b. Release a tour hold once the tour is tourReleaseHours past and no sign-up link was sent (that
+// would have made them Signed Up). Staff own the follow-up from here, so no automatic re-invite.
+for (const e of entries) {
+  if (e.status === 'Tour Requested' && e.tourAt && NOW - e.tourAt >= CFG.tourReleaseHours * HOUR) {
+    actions.push({
+      recordId: e.id,
+      fields: { Status: 'Not Right Now', Reason: `Toured ${fmtTime(e.tourAt)}; no sign-up link sent within ${CFG.tourReleaseHours}h` },
+      email: null,
+      log: logRow(e, 'Tour Released', { Detail: `Tour on ${fmtTime(e.tourAt)}; no sign-up link sent within ${CFG.tourReleaseHours}h, so the spot was released → Not Right Now` }),
+    });
+    e.status = 'Not Right Now';
+  }
+}
+
 if (!inSendWindow) return actions.map((a) => ({ json: a }));
 
 // 2. Priority order: manual rank → warm → weighted wait (new members count x newMemberWeight) → joined first.
