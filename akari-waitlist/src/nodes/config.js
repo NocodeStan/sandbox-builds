@@ -21,7 +21,11 @@ const cfg = {
   priceByTier: { Unlimited: 220, Daytime: 165, '4-Visit': 140 }, // $/month; no "Summer Pass" price yet — update when it's live on the form
 
   // Tours: "Tour first" sends people to their location's Cal.com page. Blank = the old "when suits you?" box.
-  tourBookingUrlByLocation: { Williamsburg: '', Greenpoint: '', 'Lower East Side': '' }, // e.g. 'https://cal.com/akari/williamsburg-tour'
+  tourBookingUrlByLocation: {
+    Williamsburg: 'https://akari-sauna.cal.com/akari-williamsburg/akari-williamsburg-tours',
+    Greenpoint: 'https://akari-sauna.cal.com/akari-greenpoint/akari-greenpoint-tours',
+    'Lower East Side': 'https://akari-sauna.cal.com/hello/akari-les-tours',
+  }, // from Jack, 28 Oct
   tourReleaseHours: 48, // a tour hold is released this long after the booked tour, unless a sign-up link was sent
   calWebhookSecret: 'CHANGE-ME', // long random string; goes on the end of the Cal.com webhook URL (?k=...)
 

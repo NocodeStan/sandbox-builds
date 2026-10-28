@@ -24,6 +24,7 @@ export function baseConfig(overrides = {}) {
     replyToEmail: 'hello@akari.test',
     teamEmails: ['team@akari.test'],
     sendWindow: { startHour: 0, endHour: 24 },
+    tourBookingUrlByLocation: {}, // tests opt in to Cal.com links explicitly
     ...overrides,
   };
 }

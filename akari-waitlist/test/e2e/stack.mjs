@@ -63,7 +63,9 @@ export async function startStack({ port = Number(process.env.N8N_TEST_PORT) || 5
     ['sendWindow: { startHour: 8, endHour: 20 }', 'sendWindow: { startHour: 0, endHour: 24 }'],
     ['sandboxMode: true', 'sandboxMode: false'],
     ["calWebhookSecret: 'CHANGE-ME'", `calWebhookSecret: '${CAL_SECRET}'`],
-    ["tourBookingUrlByLocation: { Williamsburg: ''", `tourBookingUrlByLocation: { Williamsburg: '${CAL_URL}'`],
+    ["Williamsburg: 'https://akari-sauna.cal.com/akari-williamsburg/akari-williamsburg-tours'", `Williamsburg: '${CAL_URL}'`],
+    ["Greenpoint: 'https://akari-sauna.cal.com/akari-greenpoint/akari-greenpoint-tours'", "Greenpoint: ''"],
+    ["'Lower East Side': 'https://akari-sauna.cal.com/hello/akari-les-tours'", "'Lower East Side': ''"],
   ];
   for (const [from, to] of swaps) {
     assert.ok(config.parameters.jsCode.includes(from), `Config is missing ${from}`);
