@@ -58,7 +58,7 @@ if (['No Longer Interested', 'Removed'].includes(prior)) notes.push(`Their previ
 if (removed.length) notes.push(`Because this is Unlimited, they were also taken off ${removed.length} other waitlist${removed.length > 1 ? 's' : ''}.`);
 if (CFG.testRecipient) {
   notes.push(isAllowedRecipient(e.email)
-    ? 'Test mode: this address is on the allow-list, so the email went to them for real.'
+    ? `Test mode: this address is on the allow-list, so the email went to them for real, with a copy to ${esc(CFG.testRecipient)}.`
     : `Test mode: the email was redirected to ${esc(CFG.testRecipient)}.`);
 }
 if (CFG.sandboxMode) notes.push('SendGrid sandbox mode is on, so no email was actually delivered.');

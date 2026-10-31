@@ -120,12 +120,19 @@ function sendgridPayload(m) {
   const list = (Array.isArray(m.to) ? m.to : [m.to]).filter(Boolean);
   let to = list.map((email) => (m.name && list.length === 1 ? { email, name: m.name } : { email }));
   let subject = m.subject;
-  if (CFG.testRecipient && !(list.length && list.every(isAllowedRecipient))) {
-    subject = `[TEST → ${list.join(', ')}] ${subject}`;
-    to = [{ email: CFG.testRecipient }];
+  const personalizations = [{ to }];
+  if (CFG.testRecipient) {
+    const sentForReal = list.length && list.every(isAllowedRecipient);
+    if (!sentForReal) {
+      subject = `[TEST → ${list.join(', ')}] ${subject}`;
+      personalizations[0].to = [{ email: CFG.testRecipient }];
+    } else if (!list.some((a) => a.trim().toLowerCase() === CFG.testRecipient.trim().toLowerCase())) {
+      // Delivered for real, and the test inbox gets its own labelled copy (SendGrid sends each personalization separately).
+      personalizations.push({ to: [{ email: CFG.testRecipient }], subject: `[COPY → ${list.join(', ')}] ${subject}` });
+    }
   }
   return {
-    personalizations: [{ to }],
+    personalizations,
     from: { email: CFG.fromEmail, name: CFG.fromName },
     reply_to: { email: CFG.replyToEmail || CFG.fromEmail },
     subject,

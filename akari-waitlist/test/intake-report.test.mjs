@@ -140,10 +140,14 @@ test('Test mode allow-list: allowed people get their own email for real, everyon
     const p = run(ok, cfg);
     assert.deepEqual(p.personalizations[0].to.map((t) => t.email), [ok], ok);
     assert.doesNotMatch(p.subject, /TEST/, ok);
+    // …and the test inbox gets a labelled copy, sent separately so the tester sees exactly what they saw.
+    assert.deepEqual(p.personalizations[1], { to: [{ email: 'qa@akari.test' }], subject: `[COPY → ${ok}] Hello` }, ok);
   }
+  // No copy when the allowed person IS the test inbox (SendGrid would reject the duplicate anyway).
+  assert.equal(run('QA@akari.test', { ...cfg, allowedRecipients: ['@akari.test'] }).personalizations.length, 1);
   for (const no of ['robbie@braze.com', 'jackk@gmail.com', 'jack@gmail.com.evil.test', 'x@notakarisauna.com', 'someone@other.akarisauna.com.au']) {
     const p = run(no, cfg);
-    assert.deepEqual(p.personalizations[0].to, [{ email: 'qa@akari.test' }], no);
+    assert.deepEqual(p.personalizations, [{ to: [{ email: 'qa@akari.test' }] }], no);
     assert.match(p.subject, /^\[TEST → /, no);
   }
   // A list is only sent for real when every address on it is allowed.

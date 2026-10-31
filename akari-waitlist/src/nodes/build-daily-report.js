@@ -71,7 +71,7 @@ for (const f of today.filter((x) => String(x.Detail || '').includes('SIGNUP URL 
 }
 if (!CFG.engineEnabled) attention.push('The engine is switched OFF in Config.');
 if (CFG.sandboxMode) attention.push('SendGrid sandbox mode is ON — no emails are being delivered.');
-if (CFG.testRecipient) attention.push(`Test mode is ON — emails go to ${CFG.testRecipient}${(CFG.allowedRecipients || []).length ? `, except ${CFG.allowedRecipients.join(', ')}, who receive theirs for real` : ''}.`);
+if (CFG.testRecipient) attention.push(`Test mode is ON — emails go to ${CFG.testRecipient}${(CFG.allowedRecipients || []).length ? `, except ${CFG.allowedRecipients.join(', ')}, who receive theirs for real (with a copy to ${CFG.testRecipient})` : ''}.`);
 
 const dateLabel = NOW.toLocaleDateString('en-US', { timeZone: CFG.timezone, weekday: 'long', month: 'long', day: 'numeric' });
 const html = emailLayout(`
