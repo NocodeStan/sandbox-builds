@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { baseConfig, capacity, daysAgo, entry, hoursAgo, hoursFromNow, records, runNode } from './harness.mjs';
 
-const plan = (caps, entries, cfg = {}) =>
+const plan = (caps, entries, cfg = {}, pauses = []) =>
   runNode('plan-engine-actions', {
     nodes: {
       Config: [{ json: { cfg: baseConfig(cfg) } }],
       'Get Capacity': records(caps),
       'Get Active Entries': records(entries),
+      'Get Recent Pause Alerts': records(pauses),
     },
   }).map((i) => i.json);
 
@@ -50,11 +51,21 @@ test('open holds and unconfirmed signups count against the gap until staff recou
   assert.deepEqual(ids(of(plan([recounted], [held, signed, waiting]), 'Invited')), [waiting.id]);
 });
 
-test('expired hold: 1st miss → Warm (cooling off, next person invited); 2nd miss → No Reply', () => {
+test('default: no reply to an invite → No Reply straight away (out of the line); the next person is invited', () => {
+  const missed = entry({ Status: 'Invited', 'Invite Expires At': hoursAgo(1), 'Joined At': daysAgo(50) });
+  const next = entry({ 'Joined At': daysAgo(5) });
+  const out = plan([capacity({ 'Minimum Members': 11, 'Active Members': 10 })], [missed, next]);
+  const t = of(out, 'Timed Out')[0];
+  assert.deepEqual([t.recordId, t.fields.Status, t.fields['Timeout Count']], [missed.id, 'No Reply', 1]);
+  assert.match(t.log.Detail, /→ No Reply/);
+  assert.deepEqual(ids(of(out, 'Invited')), [next.id]);
+});
+
+test('timeoutsBeforeNoReply: 2 → 1st miss Warm (cooling off, next person invited); 2nd miss → No Reply', () => {
   const first = entry({ Status: 'Invited', 'Invite Expires At': hoursAgo(1), 'Joined At': daysAgo(50) });
   const second = entry({ Status: 'Invited', 'Invite Expires At': hoursAgo(1), 'Timeout Count': 1, 'Joined At': daysAgo(60) });
   const next = entry({ 'Joined At': daysAgo(5) });
-  const out = plan([capacity({ 'Minimum Members': 12, 'Active Members': 10 })], [first, second, next]);
+  const out = plan([capacity({ 'Minimum Members': 12, 'Active Members': 10 })], [first, second, next], { timeoutsBeforeNoReply: 2 });
   const timed = of(out, 'Timed Out');
   assert.equal(timed.find((a) => a.recordId === first.id).fields.Status, 'Warm');
   assert.equal(timed.find((a) => a.recordId === second.id).fields.Status, 'No Reply');
@@ -120,9 +131,9 @@ test('engine switch off → nothing happens', () => {
   assert.deepEqual(plan([capacity({ 'Minimum Members': 15 })], [entry({})], { engineEnabled: false }), []);
 });
 
-test('guardrail caps invites per queue per run', () => {
+test('guardrail caps invites per queue per run (12 open spots → 10 invites this hour)', () => {
   const people = Array.from({ length: 30 }, () => entry({}));
-  const out = plan([capacity({ 'Minimum Members': 500 })], people);
+  const out = plan([capacity({ 'Minimum Members': 22 })], people);
   assert.equal(of(out, 'Invited').length, 10);
 });
 
@@ -149,11 +160,16 @@ test('someone near the front of two queues gets one combined heads-up email', ()
   assert.equal(m.subject, "You're Almost Up for a Membership at Akari Williamsburg");
 });
 
-test('heads-up follows Jack\'s copy: subject with the right article, real hold length, reply to leave', () => {
-  const m = of(plan([capacity()], [entry({})]), 'Primed')[0].email;
+test('heads-up follows Jack\'s copy: subject with the right article, real hold length, still-interested / remove buttons', () => {
+  const p = of(plan([capacity()], [entry({})]), 'Primed')[0];
+  assert.equal(p.fields['Invite Token'], '__TOKEN__', 'heads-up rows get a token so the buttons work');
+  const m = p.email;
+  assert.ok(m.html.includes('respond?t=__TOKEN__&amp;a=still'));
+  assert.ok(m.html.includes('respond?t=__TOKEN__&amp;a=remove'));
+  assert.match(m.text, /I'm still interested: \S+a=still/);
   assert.equal(m.subject, "You're Almost Up for an Unlimited Membership at Akari Williamsburg");
   assert.match(m.text, /you'll have 48 hours to claim your spot/);
-  assert.match(m.text, /just reply to this email and we'll remove you/);
+  assert.match(m.text, /you can remove yourself from the waitlist instead/);
   assert.match(m.text, /Warmly,\nAkari team$/);
   assert.match(m.html, /A spot could open up any day now/);
 });

@@ -171,6 +171,7 @@ test('Daily report: counts, conversion by location, attention items', () => {
       'Get Log (30 days)': records(logs),
       'Get Queue Snapshot': records([staleTour]),
       'Get Capacity (report)': records(caps.map((fields) => ({ fields }))),
+      'Get Not Right Now (report)': records([]),
     },
   });
   const p = json.payload;

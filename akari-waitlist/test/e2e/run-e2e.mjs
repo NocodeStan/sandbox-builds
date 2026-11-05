@@ -159,17 +159,17 @@ try {
     await waitFor(() => emailsTo('casey@example.com').length === 2, 'Casey invite email');
   });
 
-  await step('Timeout: expired hold → Warm; staff recount + higher minimum → chain advances to the next person', async () => {
+  await step('Timeout: expired hold → No Reply (out of the line); staff recount + higher minimum → chain advances to the next person', async () => {
     get(casey.id).fields['Invite Expires At'] = new Date(Date.now() - HOUR).toISOString();
     const cap = mock.table('Capacity')[0];
     Object.assign(cap.fields, { 'Minimum Members': 13, 'Active Members': 11, 'Active Updated At': new Date().toISOString() });
     await post('glofox-end-date', {});
-    await waitFor(() => get(casey.id).fields.Status === 'Warm' && get(blair.id).fields.Status === 'Invited', 'Casey warm, Blair invited');
+    await waitFor(() => get(casey.id).fields.Status === 'No Reply' && get(blair.id).fields.Status === 'Invited', 'Casey No Reply, Blair invited');
     assert.equal(get(casey.id).fields['Timeout Count'], 1);
     await waitFor(() => logs('Timed Out').length === 1, 'timeout logged (written just after the row update)');
   });
 
-  await step('Late reply after the hold expired → stays Warm with priority, told they are first in line', async () => {
+  await step('Late reply from No Reply → back in line as Warm (first in line), told so', async () => {
     const r = await form({ t: tokenOf(casey.id), a: 'yes' });
     assert.match(await r.text(), /first in line/);
     await waitFor(() => logs('Late Reply').length === 1, 'late reply logged');
@@ -200,8 +200,10 @@ try {
     assert.equal(r.status, 200, await r.text());
     await waitFor(() => mock.state.emails.length === before + 1, 'report email');
     const rep = mock.state.emails.at(-1);
-    assert.match(rep.subject, /^Waitlist summary/);
+    assert.match(rep.subject, /^Akari Waitlist Daily Summary: /);
     const html = rep.content[1].value;
+    assert.match(html, /Needs attention/);
+    assert.match(html, /Last 24 hours/);
     assert.match(html, /Signed up<\/td><td[^>]*>1</);
     assert.match(html, /Williamsburg · Unlimited/);
     assert.match(html, /Travelling until November/);

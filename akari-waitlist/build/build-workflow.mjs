@@ -192,6 +192,7 @@ export function buildMain() {
     // 2 · Engine
     airtableGet('Get Capacity', [X.l1, Y.hourly], 'capacity', '{Enabled}'),
     airtableGet('Get Active Entries', [X.l2, Y.hourly], 'waitlist', F_ACTIVE, { executeOnce: true }),
+    airtableGet('Get Recent Pause Alerts', [X.l3, Y.hourly - 120], 'log', `AND({Event}="Queue Paused",IS_AFTER({Timestamp},DATEADD(NOW(),-1,"days")))`, { executeOnce: true, paginate: false }),
     code('Plan Engine Actions', [X.l3, Y.hourly], 'plan-engine-actions', { executeOnce: true }),
 
     // 3 · Candidate response
@@ -255,6 +256,7 @@ export function buildMain() {
     node('Generate Tokens', 'n8n-nodes-base.crypto', 1, [EX.gen, EXY], { action: 'generate', dataPropertyName: 'token', encodingType: 'hex', stringLength: 48 }),
     code('Apply Tokens', [EX.apply, EXY], 'apply-tokens'),
     code('Chunk Waitlist Updates', [EX.chunkUpd, EXY], 'chunk-waitlist-updates'),
+    ifTrue('Any Rows to Update?', [EX.chunkUpd, EXY - 200], '($json.records || []).length > 0'),
     code('Pending Waitlist Writes', [EX.pendUpd, EXY], 'pending-writes'),
     httpJson('Update Waitlist Rows', [EX.update, EXY], 'PATCH', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify({ records: $json.records, typecast: true }) }}', CREDS.airtable, AIRTABLE_PACE, {}, FAIL_SOFT),
     code('Check Waitlist Writes', [EX.checkUpd, EXY], 'check-waitlist-writes'),
@@ -274,6 +276,7 @@ export function buildMain() {
     airtableGet('Get Log (30 days)', [X.l1, Y.report], 'log', `IS_AFTER({Timestamp},DATEADD(NOW(),-30,"days"))`),
     airtableGet('Get Queue Snapshot', [X.l2, Y.report], 'waitlist', F_ACTIVE, { executeOnce: true }),
     airtableGet('Get Capacity (report)', [X.l3, Y.report], 'capacity', '', { executeOnce: true }),
+    airtableGet('Get Not Right Now (report)', [X.l3, Y.report + 160], 'waitlist', '{Status}="Not Right Now"', { executeOnce: true }),
     code('Build Daily Report', [X.l4, Y.report], 'build-daily-report', { executeOnce: true }),
     httpJson('Send Report (SendGrid)', [X.l5, Y.report], 'POST', `={{ ${CFG('sendgridApi')} }}`, '={{ JSON.stringify($json.payload) }}',
       CREDS.sendgrid, { response: { response: { responseFormat: 'text' } } }),
@@ -320,7 +323,8 @@ export function buildMain() {
     'Create Waitlist Entries': { main: [to('Log: Joined')] },
     'Log: Joined': { main: [to('Acknowledge Typeform')] },
     'Get Capacity': { main: [to('Get Active Entries')] },
-    'Get Active Entries': { main: [to('Plan Engine Actions')] },
+    'Get Active Entries': { main: [to('Get Recent Pause Alerts')] },
+    'Get Recent Pause Alerts': { main: [to('Plan Engine Actions')] },
     'Plan Engine Actions': { main: [to('Action Queue')] },
     'Find Entry by Token (view)': { main: [to('Render Confirm Page')] },
     'Render Confirm Page': { main: [to('Respond with Page')] },
@@ -346,7 +350,8 @@ export function buildMain() {
     'Action Queue': { main: [to('Generate Tokens')] },
     'Generate Tokens': { main: [to('Apply Tokens')] },
     'Apply Tokens': { main: [to('Chunk Waitlist Updates')] },
-    'Chunk Waitlist Updates': { main: [to('Pending Waitlist Writes')] },
+    'Chunk Waitlist Updates': { main: [to('Any Rows to Update?')] },
+    'Any Rows to Update?': { main: [to('Pending Waitlist Writes'), to('Chunk Log Rows')] },
     'Pending Waitlist Writes': { main: [to('Update Waitlist Rows')] },
     'Update Waitlist Rows': { main: [to('Check Waitlist Writes')] },
     'Check Waitlist Writes': { main: [to('Retry Waitlist Writes?')] },
@@ -361,7 +366,8 @@ export function buildMain() {
     'Build Emails': { main: [to('Send Email (SendGrid)')] },
     'Get Log (30 days)': { main: [to('Get Queue Snapshot')] },
     'Get Queue Snapshot': { main: [to('Get Capacity (report)')] },
-    'Get Capacity (report)': { main: [to('Build Daily Report')] },
+    'Get Capacity (report)': { main: [to('Get Not Right Now (report)')] },
+    'Get Not Right Now (report)': { main: [to('Build Daily Report')] },
     'Build Daily Report': { main: [to('Send Report (SendGrid)')] },
   };
 

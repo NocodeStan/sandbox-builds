@@ -41,11 +41,11 @@ Source of truth: Eraser board **Waitlist Automation_1.0** (11 Sep call notes + a
 | **Step 5** Early heads-up to the next ~10 in each queue | Plan Engine Actions (`primeCount: 10`) |
 | **Step 6** Invite by email (SendGrid) with a response window | Executor → SendGrid; `holdHours: 48` (was 24; changed at Jack's request, 27 Oct) |
 | **24 Sep** The 24h window *holds the spot*; tours convert at over 90% | Hold counts against the gap. Plus a **"tour first"** response that keeps holding the spot (see A1). |
-| **Step 7** Yes → signup link (Glofox handles payment) · Not now → "Not Right Now", manual follow-up · No → "No Longer Interested", reason captured · no reply → Warm, keeps priority | Lane 3 · Candidate response |
+| **Step 7** Yes → signup link (Glofox handles payment) · Not now → "Not Right Now", manual follow-up · No → "No Longer Interested", reason captured · no reply → Warm, keeps priority | Lane 3 · Candidate response. No reply → No Reply since Jack's 5 Nov change (see A4) |
 | **Notes** Late reply goes to Warm, no penalty | Decide Response |
 | **Step 7** Unlimited → removed from other queues automatically; lower tier → asked whether to stay | Decide Response (+ one-click "remove me" link) |
-| **Diagram** No-reply bucket, to be re-engaged by a campaign | Second missed window → `No Reply` status |
-| **Step 8** Daily email: invited, signed up, not now, no longer interested (with reasons), conversion by location | Lane 5 · Daily report (07:30) |
+| **Diagram** No-reply bucket, to be re-engaged by a campaign | First missed window → `No Reply` status (Jack, 5 Nov); staff can put them back (§9) |
+| **Step 8** Daily email: invited, signed up, not now, no longer interested (with reasons), conversion by location | Lane 5 · Daily report (07:30), in Jack's template 4 layout (5 Nov) |
 | **Out of scope** Keep-warm nurture sequence, SMS, live Glofox sync | Not built. SMS can be added later on the same executor. |
 
 ## 2. Decisions to confirm with the client
@@ -57,13 +57,16 @@ Each one is a single setting or a small code change if they want it different.
 | A1 | **"I'd like a tour first"** is a 4th response. It holds the spot, alerts the team and (27 Oct) sends the candidate to their location's **Cal.com** page. The hold is released **48h after the booked tour** unless staff press **Send Sign-up Link** first; requests with no tour booked after a day are flagged in the daily report. | The 24 Sep note says tours are *the* reason for the hold. 27 Oct: Jack asked for Cal.com booking and a release rule; staff take over after the tour. | `tourBookingUrlByLocation`, `tourReleaseHours` |
 | A2 | "1 new ≈ 3 upgrades" is applied as **weighted waiting time**: a new member's days waiting count 3×. | Keeps oldest-first fairness while tilting toward new members. | `newMemberWeight` (e.g. `1000` = new members always first) |
 | A3 | **Manual Rank beats everything**, including Warm people. | Explicit staff intent should win. | `src/nodes/plan-engine-actions.js` sort |
-| A4 | 1st missed window → **Warm**, first in line again after a **72h** cool-off. 2nd miss → **No Reply** bucket. | This is how I read the diagram's "Warm → next time a spot opens → No-reply bucket" arrow. The cool-off stops the engine re-inviting the same person for the same spot an hour later. | `warmCooldownHours`, `timeoutsBeforeNoReply` |
+| A4 | 1st missed window → **No Reply**, out of the line (Jack, 5 Nov). They come back as **Warm** (first in line) if they reply late on the old email, or if staff set Status to Warm; staff can also set Waiting to restore their original place. | Jack's test note: "remove the no reply people initially but have the option to put them back". Setting `timeoutsBeforeNoReply: 2` restores the earlier rule (1st miss → Warm after a 72h cool-off, 2nd → No Reply); the cool-off never applies to a staff put-back. | `timeoutsBeforeNoReply`, `warmCooldownHours` |
 | A5 | A person holds **one live invite at a time** across all their queues. | Avoids two simultaneous offers to the same person. | Plan Engine Actions |
 | A6 | **Send Now** sends the same invite email, whose "Yes" button is the tracked signup link. It also counts as a held spot for that queue. | Tracking the "Yes" is what makes the Signed Up status, the reporting and the Unlimited clean-up work. | `src/nodes/build-send-now.js` |
 | A7 | **Signed Up = clicked Yes.** Payment happens in Glofox, which we don't read in v1. Signups since staff last updated `Active Members` count against the gap, so the queue isn't over-invited. | There's no Glofox sync in v1. | Keep `Active Members` current; the count resets automatically when edited. |
 | A8 | Lower-tier signup: stays on other lists, and the confirmation email has a one-click "remove me from my other waitlists" link. | Board: "asked whether to stay". | — |
 | A9 | Invites and heads-ups are only sent **08:00–20:00 New York time**; timeouts are processed around the clock. The engine runs **hourly**. | Nobody gets a 24h clock started at 3am. | `sendWindow`, `Every Hour` trigger |
 | A10 | "Prioritise New Only" is **per queue**, a column on Capacity. | The board doesn't say whether it's global; per queue can do both. | Set every row the same for a global switch. |
+| A11 | The heads-up email has two buttons: **I'm still interested** (stamps `Interest Confirmed At`, logs *Still Interested*, keeps their place) and **Remove me from the waitlist** (→ No Longer Interested with an optional reason). Both act on the lists named in that email only, and only while the row is Primed. | Jack, 5 Nov (T7): know who is actually ready. Heads-up links can't be used to claim a spot. | `src/nodes/decide-response.js` |
+| A12 | A queue whose open spots (Minimum − Active − pending − holds) exceed **15** is **paused**: no invites or heads-ups, one alert email a day to `teamEmails` (*Check Minimum Members…*), logged *Queue Paused*, listed in the daily summary. | Jack, 5 Nov (decision 4): a typo like 500 for 50 would otherwise send 10 invites an hour. **Raise it before opening a new location** with a large minimum. | `pauseIfOpenSpotsOver` |
+| A13 | "Not ready yet" people are listed in the daily summary once **60 days** have passed since they answered, for a manual check-in. | Jack, 5 Nov (decision 1). Nothing is sent to them automatically. | `notReadyFollowUpDays` |
 
 ---
 
@@ -99,11 +102,11 @@ flowchart LR
 | Status | Set by | Next |
 |---|---|---|
 | Waiting | Intake / staff | Primed or Invited |
-| Primed | Engine (heads-up sent) | Invited |
-| Invited | Engine or Send Now (48h hold) | Signed Up · Tour Requested · Not Right Now · No Longer Interested · Warm (timeout) |
+| Primed | Engine (heads-up sent) | Invited · No Longer Interested ("Remove me" button) |
+| Invited | Engine or Send Now (48h hold) | Signed Up · Tour Requested · Not Right Now · No Longer Interested · No Reply (timeout) |
 | Tour Requested | Candidate | Staff **Send Sign-up Link** → Signed Up; or released to Not Right Now 48h after the booked tour |
-| Warm | 1st timeout or late reply | Re-invited first (after 72h cool-off unless they replied late) |
-| No Reply | 2nd timeout | Staff / future campaign |
+| Warm | Late reply, or staff put a No Reply row back | Re-invited first on the next run |
+| No Reply | Missed the 48h window (1st timeout) | Late reply → Warm; staff set Warm (first in line) or Waiting (original place) |
 | Not Right Now | Candidate, or a released tour hold | Staff follow-up (no auto re-invite) |
 | No Longer Interested | Candidate | Closed |
 | Signed Up | Candidate clicked Yes, or staff pressed Send Sign-up Link | Closed |
@@ -178,6 +181,10 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 | `tourBookingUrlByLocation` | Each location's Cal.com booking page. Blank = the old "when suits you?" box for that location |
 | `tourReleaseHours` | How long after the booked tour the hold is released (48) |
 | `calWebhookSecret` | A long random string. It goes on the end of the Cal.com webhook URL (§4.7) |
+| `timeoutsBeforeNoReply` | `1` = a missed invite goes straight to No Reply (Jack, 5 Nov). `2` = one more chance via Warm first |
+| `pauseIfOpenSpotsOver` | `15`. A queue with more open spots than this is paused and the team is emailed. Raise it when a new location opens with a large minimum |
+| `notReadyFollowUpDays` | `60`. "Not ready yet" people appear in the daily summary for a check-in after this |
+| `dashboardUrl` | The "here" link at the end of the daily summary (e.g. a shared Airtable interface). Blank = the Airtable base |
 
 4. Workflow **Settings** → *Error workflow* → **Akari Waitlist · Error Alert**. Check the timezone is America/New_York (it's already set in the JSON).
 5. **Publish** (2.x) / **Activate** (1.x). The email links point at production webhook URLs, so response flows only work on a published workflow.
@@ -227,7 +234,8 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 |---|---|---|
 | Get Capacity | HTTP GET Airtable (paginated) | Enabled queues. |
 | Get Active Entries | HTTP GET Airtable (paginated, 500ms between pages) | Waiting / Primed / Invited / Warm / Tour Requested, plus Signed Up in the last 60 days. |
-| Plan Engine Actions | Code | 1) Expires holds past 48h (→ Warm / No Reply). 2) Inside the send window, per queue: works out the open spots, invites in priority order, then primes the next 10. Makes no changes itself; outputs actions to the executor. |
+| Get Recent Pause Alerts | HTTP GET Airtable | *Queue Paused* log rows from the last 24h, so a paused queue alerts once a day, not hourly. |
+| Plan Engine Actions | Code | 1) Expires holds past 48h (→ No Reply, or Warm with the two-strike setting). 2) Inside the send window, per queue: works out the open spots; above `pauseIfOpenSpotsOver` it pauses the queue and alerts; otherwise invites in priority order, then primes the next 10. Makes no changes itself; outputs actions to the executor. |
 
 ### Lane 3 · Candidate response
 | Node | Type | What it does |
@@ -279,8 +287,8 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 ### Lane 5 · Daily report
 | Node | Type | What it does |
 |---|---|---|
-| Get Log (30 days) · Get Queue Snapshot · Get Capacity (report) | HTTP GET Airtable | Report data. |
-| Build Daily Report | Code | 24h counts, 30-day conversion by location, reasons given, queue snapshot. Flags: queues with no Signup URL, open spots with an empty queue, stale tour holds, test/sandbox mode on. |
+| Get Log (30 days) · Get Queue Snapshot · Get Capacity (report) · Get Not Right Now (report) | HTTP GET Airtable | Report data. |
+| Build Daily Report | Code | Jack's template 4: *Needs attention* (invites expiring in 24h, tours not booked, open spots with no invite, "not ready yet" due a check-in), *Last 24 hours* (sign-ups, invites, accepted, passed, expired, tour requests), *By location*, dashboard link. Underneath: details to check (no Signup URL, paused queues, empty queues, stale tour holds, released holds, test/sandbox mode), the check-in list, activity, 30-day conversion by location, queues now, reasons given. |
 | Send Report (SendGrid) | HTTP POST SendGrid | To `teamEmails`. |
 
 ### Error workflow
@@ -333,12 +341,13 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 - [ ] `sandboxMode: false`, `testRecipient: ''`, `sendNowSecret` changed and matching both Airtable buttons
 - [ ] Cal.com links in `tourBookingUrlByLocation`; Cal.com webhook pointing at `…/tour-booking?k=<calWebhookSecret>`
 - [ ] Error workflow published and linked; a test failure produced an email
-- [ ] Every enabled queue has Minimum, Active, **Signup URL**
+- [ ] Every enabled queue has Minimum, Active, **Signup URL**, and Minimum − Active ≤ `pauseIfOpenSpotsOver`
+- [ ] Waitlist has the **Interest Confirmed At** field (date with time)
 - [ ] Legacy Excel waitlist imported with original `Joined At` dates
 - [ ] Staff briefed on the runbook (§9)
 
 ## 8. Airtable schema (manual build)
-**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes (long text) · Tour At (date-time) · Notes (long text) · Priority Score (formula, see `airtable/setup-airtable.mjs`) · Send Now (button) · Send Sign-up Link (button).
+**Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes (long text) · Tour At · Interest Confirmed At (date-time) · Notes (long text) · Priority Score (formula, see `airtable/setup-airtable.mjs`) · Send Now (button) · Send Sign-up Link (button).
 
 **Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL).
 
@@ -350,7 +359,10 @@ Date-time fields: time zone America/New_York.
 - **After each recount in Glofox**, update `Active Members`. This also clears "pending signups" from the maths.
 - **Tour Requested**: the candidate books through Cal.com and the time appears in **Tour At**. After the tour, press **Send Sign-up Link** if they want to join. If nothing is sent, the hold is released 48h after the tour and they move to Not Right Now (the daily summary lists them).
 - **Who's next?** Open the **Line** view: each queue is sorted by Priority Score, highest first.
-- **Not Right Now**: follow up by hand; press Send Now when they're ready.
+- **Not Right Now**: follow up by hand; press Send Now when they're ready. After 60 days they're listed in the daily summary under *due a check-in*.
+- **No Reply** (missed their 48h window): out of the line. To put someone back, set Status to **Warm** (invited first on the next hourly run) or **Waiting** (back to their original place). If they press Sign up on the old email, they return as Warm by themselves.
+- **"Check Minimum Members: … is paused" email**: the queue's numbers give more open spots than `pauseIfOpenSpotsOver` (15). Fix `Minimum Members` / `Active Members` on that Capacity row and the next hourly run carries on. If the number is right (a new location), raise `pauseIfOpenSpotsOver` in Config.
+- **Who is ready?** In the Line view, `Interest Confirmed At` shows who pressed "I'm still interested" in their heads-up.
 - **Reorder**: type a number in `Manual Rank` (1 = next). Clear it to go back to the rules.
 - **Pause everything**: set `engineEnabled: false` in Config. Links and Send Now keep working.
 - **"Temporary Airtable rate limit" email**: no action. Several things hit Airtable in the same second; it locks the base for 30s. Candidates were shown "try again in a minute" (their page retries by itself), saves wait the lockout out, and the hourly engine runs again next hour. Act only if it repeats every hour.
@@ -383,7 +395,7 @@ Writes a dated log to `simulation/log-<timestamp>.md`. In `live` mode it creates
 
 ## 13. Client UAT (`npm run uat`)
 
-`test/uat/run-uat.mjs` runs "a week at Akari" from the client's seat through the shipped workflow in a real n8n, against mock Airtable and SendGrid. The mock is strict: 5 requests/second, 30s lockout, 10-row batches, real formulas. The run covers 10 Typeform variants, the hourly engine, every candidate response (including scanners, double-clicks, bursts, late and changed-mind replies), staff actions (Send Now, recounts, manual rank), time travel across 12 days, two daily reports, a copy review of every email against Jack's approved templates, and whole-run data-integrity checks.
+`test/uat/run-uat.mjs` runs "a week at Akari" from the client's seat through the shipped workflow in a real n8n, against mock Airtable and SendGrid. The mock is strict: 5 requests/second, 30s lockout, 10-row batches, real formulas. The run covers 10 Typeform variants, the hourly engine, every candidate response (including scanners, double-clicks, bursts, late and changed-mind replies), staff actions (Send Now, recounts, manual rank, putting a No Reply person back), heads-up replies (still interested / remove me), a paused queue, time travel across 62 days, three daily reports, a copy review of every email against Jack's approved templates, and whole-run data-integrity checks.
 
 Each check reads as what Jack expects. Results: ✅ pass · ❌ fail (defect) · ⚠️ risk (works, residual risk) · ❓ open (needs a product decision). The report, including the full inbox and final Airtable state, is written to `test/uat/reports/uat-<label>.md`.
 

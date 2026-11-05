@@ -36,7 +36,7 @@ const SELECTS = {
     'Invite Source': ['Auto', 'Send Now'],
   },
   'Activity Log': {
-    Event: ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released'],
+    Event: ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released', 'Still Interested', 'Queue Paused'],
   },
 };
 
@@ -153,7 +153,7 @@ function staffEditCapacity(queue, fields) {
   if ('Active Members' in fields) c.fields['Active Updated At'] = iso(Date.now());
 }
 // Time travel: shift every stored timestamp into the past, i.e. "N hours pass".
-const DATE_FIELDS = { Waitlist: ['Joined At', 'Invited At', 'Invite Expires At', 'Primed At', 'Response At'], Capacity: ['Active Updated At'], 'Activity Log': ['Timestamp'] };
+const DATE_FIELDS = { Waitlist: ['Joined At', 'Invited At', 'Invite Expires At', 'Primed At', 'Response At', 'Interest Confirmed At'], Capacity: ['Active Updated At'], 'Activity Log': ['Timestamp'] };
 function travel(hours) {
   for (const [t, fields] of Object.entries(DATE_FIELDS)) {
     for (const r of mock.table(t)) for (const f of fields) if (r.fields[f]) r.fields[f] = iso(new Date(r.fields[f]).getTime() - hours * HOUR);
@@ -171,7 +171,8 @@ mock.seed('Capacity', [
   cap('Greenpoint · 4-Visit', 'Greenpoint', '4-Visit', 10, 9), // Signup URL forgotten
   cap('Lower East Side · Unlimited', 'Lower East Side', 'Unlimited', 50, 0, { Enabled: false }), // not open yet
   cap('Greenpoint · Summer Pass', 'Greenpoint', 'Summer Pass', 5, 4, { 'Signup URL': SIGNUP('gp-sp') }),
-  cap('Williamsburg · 4-Visit', 'Williamsburg', '4-Visit', 500, 10, { 'Signup URL': SIGNUP('wb-4v') }), // typo: meant 50
+  cap('Williamsburg · 4-Visit', 'Williamsburg', '4-Visit', 20, 10, { 'Signup URL': SIGNUP('wb-4v') }), // 10 open spots
+  cap('Greenpoint · Daytime', 'Greenpoint', 'Daytime', 500, 10, { 'Signup URL': SIGNUP('gp-day') }), // typo: meant 50 → 490 "open spots"
 ]);
 const person = (name, n, fields) => ({ Name: name, Email: at(n), Phone: '+17185550111', Location: 'Williamsburg', Membership: 'Unlimited', 'Member Type': 'New', 'Entry Source': 'Typeform', Status: 'Waiting', 'Timeout Count': 0, ...fields });
 mock.seed('Waitlist', [
@@ -249,7 +250,7 @@ try {
   expect('Jo is recorded as an Existing member', () => eq(rowOf(at(7), 'Williamsburg', 'Unlimited')?.fields['Member Type'], 'Existing'));
 
   // ═══ DAY 0 · 9AM: first engine run ═══════════════════════════
-  scenario('E1', 'First hourly run fills open spots', 'Williamsburg Unlimited has 2 open spots, Summer Pass 1, Williamsburg 4-Visit has a mistyped minimum of 500 (meant 50), Greenpoint 4-Visit has no signup link, LES is switched off.');
+  scenario('E1', 'First hourly run fills open spots', 'Williamsburg Unlimited has 2 open spots, Summer Pass 1, Williamsburg 4-Visit has 10, Greenpoint Daytime has a mistyped minimum of 500 (meant 50), Greenpoint 4-Visit has no signup link, LES is switched off.');
   const e1 = await engine('Day 0 9am');
   const invited1 = e1.logs.filter((l) => l.Event === 'Invited');
   const invitedWBU = invited1.filter((l) => l.Location === 'Williamsburg' && l.Membership === 'Unlimited').map((l) => l.Name).sort();
@@ -257,9 +258,11 @@ try {
   expect('Summer Pass: Noor is invited', () => eq(statusOf(at(5), 'Greenpoint', 'Summer Pass'), 'Invited'));
   expect('Greenpoint 4-Visit (no signup link): nobody invited', () => eq(invited1.filter((l) => l.Location === 'Greenpoint' && l.Membership === '4-Visit').length, 0));
   expect('Lower East Side (switched off): nobody invited or nudged', () => eq(e1.logs.filter((l) => l.Location === 'Lower East Side').length, 0));
-  expect('the mistyped minimum (500) only lets 10 invites out in one run', () => eq(invited1.filter((l) => l.Location === 'Williamsburg' && l.Membership === '4-Visit').length, 10));
-  expect('…and the 10 are the 10 longest-waiting (Guest01–Guest10)', () => eq(invited1.filter((l) => l.Membership === '4-Visit').map((l) => l.Name).sort(), Array.from({ length: 10 }, (_, i) => `Guest${String(i + 1).padStart(2, '0')} Test`)));
-  expect('a mistyped minimum is stopped, not just slowed (it would keep sending 10 invites every hour)', () => ({ ok: false, detail: 'The per-run cap limits the damage to 10/hour per queue but nothing pauses the queue or alerts staff; the daily report does not flag an implausible minimum.' }), 'decision');
+  expect('Williamsburg 4-Visit: 10 open spots → the 10 longest-waiting (Guest01–Guest10) are invited', () => eq(invited1.filter((l) => l.Membership === '4-Visit').map((l) => l.Name).sort(), Array.from({ length: 10 }, (_, i) => `Guest${String(i + 1).padStart(2, '0')} Test`)));
+  expect('Greenpoint Daytime (mistyped minimum, 490 open spots): paused — nobody invited or sent a heads-up', () => eq(e1.logs.filter((l) => l.Location === 'Greenpoint' && l.Membership === 'Daytime' && l.Event !== 'Queue Paused').length, 0));
+  const pauseMail = e1.sent.filter((m) => /^Check Minimum Members: Greenpoint · Daytime is paused/.test(m.subject));
+  expect('the team gets one "Check Minimum Members" alert naming the queue and the numbers', () => ({ ok: pauseMail.length === 1 && toOf(pauseMail[0]).includes(TEAM) && /490 open spots \(Minimum Members 500, Active Members 10\)/.test(textOf(pauseMail[0])), detail: pauseMail.map((m) => `${m.subject} → ${toOf(m)}`).join(' | ') || 'no alert' }));
+  expect('the pause is logged ("Queue Paused") for the Activity Log', () => eq(e1.logs.filter((l) => l.Event === 'Queue Paused').map((l) => `${l.Location} · ${l.Membership}`), ['Greenpoint · Daytime']));
   const holdsByPerson = {};
   for (const x of W().filter((x) => ['Invited', 'Tour Requested'].includes(x.fields.Status))) holdsByPerson[x.fields.Email] = (holdsByPerson[x.fields.Email] || 0) + 1;
   expect('nobody holds two spots at once (Cleo is on 2 lists, Guest01/03 on 2 lists)', () => eq(Object.values(holdsByPerson).filter((n) => n > 1).length, 0));
@@ -279,7 +282,7 @@ try {
   expect('Unlimited price $220/month', () => has(textOf(cleoInv), /\$220\/month/));
   expect('4-Visit price $140/month', () => has(textOf(inv(G(2))), /\$140\/month/));
   expect('Summer Pass (no price yet) falls back to "details, including pricing, … membership page"', () => has(textOf(inv(at(5))), /including pricing, can be found on our membership page/));
-  expect('the membership page is a clickable link in the email', () => has(htmlOf(cleoInv), /<a [^>]*href="https:\/\/www\.akarisauna\.com\/membership"/));
+  expect('the membership page is a clickable link on the word "here" (Jack, T2)', () => has(htmlOf(cleoInv), /membership page <a [^>]*href="https:\/\/www\.akarisauna\.com\/membership"[^>]*>here<\/a>/));
   expect(`deadline shown is ${HOLD_H} hours out`, () => {
     const exp = new Date(rowOf(at(10), 'Williamsburg', 'Unlimited').fields['Invite Expires At']);
     return { ok: Math.abs(exp - Date.now() - HOLD_H * HOUR) < 10 * 60000, detail: `expires ${exp.toISOString()}` };
@@ -301,7 +304,8 @@ try {
   expect('signed "Warmly, Akari team"', () => has(textOf(benHU), /Warmly,\nAkari team$/));
   expect('Maya\'s combined heads-up names both memberships', () => has(textOf(mayaHU), /Unlimited[\s\S]*Daytime|Daytime[\s\S]*Unlimited/));
   expect('a name typed as HTML is shown as text, not rendered', () => ({ ok: htmlOf(zedHU).includes('&lt;b&gt;Zed') && !htmlOf(zedHU).includes('<b>Zed'), detail: (htmlOf(zedHU).match(/Hi [^,]*,/) || [''])[0] }));
-  expect('the heads-up offers a one-click way off the list (Jack\'s {{remove_link}})', () => has(htmlOf(benHU), /a=remove|a=leave/), 'decision');
+  expect('two buttons: "I\'m still interested" and "Remove me from the waitlist" (Jack, T7)', () => eq([...htmlOf(benHU).matchAll(/a=(still|remove)"[^>]*>([^<]+)</g)].map((x) => [x[1], x[2].replace(/&#39;/g, "'")]), [['still', "I'm still interested"], ['remove', 'Remove me from the waitlist']]));
+  expect('the heads-up buttons carry this person\'s own token', () => eq(tokenIn(benHU, 'still'), rowOf(at(12), 'Williamsburg', 'Unlimited').fields['Invite Token']));
 
   // ═══ DAY 0 · candidates respond ═══════════════════════════════
   scenario('R1', 'Cleo signs up (Unlimited) — after her mail scanner pre-clicks every link', 'Cleo\'s work email security scanner opens all four links first. Then Cleo clicks "Sign up" and confirms.');
@@ -333,12 +337,15 @@ try {
   expect('alert tells staff exactly what to do after the tour (Send Sign-up Link)', () => has(textOf(tourMail), /Send Sign-up Link/));
 
   scenario('R3', 'Noor is not ready yet', 'Noor clicks "Not ready yet" and writes "Back in town in November".');
+  const noorView = await openLink(inv(at(5)), 'notnow');
+  expect('the "Not ready yet" page does not say "your spot is held until…" (Jack, T6)', () => hasNot(noorView.page, /held until/));
   r = await confirm(inv(at(5)), 'notnow', 'Back in town in November');
   expect('Noor is told she stays on the list', () => has(r.page, /still on the waitlist/));
   expect('status → Not Right Now with her reason', () => eq([statusOf(at(5), 'Greenpoint', 'Summer Pass'), rowOf(at(5), 'Greenpoint', 'Summer Pass').fields.Reason], ['Not Right Now', 'Back in town in November']));
-  expect('Jack\'s copy promises "we\'ll check back in with you down the road" — something brings Noor back to Jack\'s attention later', () => ({ ok: false, detail: 'Not Right Now is a dead end: the engine never re-offers, and the daily report only shows the reason on the day it is given.' }), 'decision');
 
   scenario('R4', 'Guest02 is no longer interested', 'Guest02 clicks "No longer interested": "Too far from me".');
+  const g2View = await openLink(inv(G(2)), 'no');
+  expect('the "No longer interested" page does not say "your spot is held until…" (Jack, T6)', () => hasNot(g2View.page, /held until/));
   await confirm(inv(G(2)), 'no', 'Too far from me');
   expect('status → No Longer Interested with reason', () => eq([statusOf(G(2), 'Williamsburg', '4-Visit'), rowOf(G(2), 'Williamsburg', '4-Visit').fields.Reason], ['No Longer Interested', 'Too far from me']));
   expect('no email is sent to them', () => eq(inbox(G(2)).filter((m) => !isInvite(m)).length, 0));
@@ -347,6 +354,7 @@ try {
   await confirm(inv(G(3)), 'yes');
   const g3Conf = inbox(G(3)).find(isConfirmation);
   expect('4-Visit wording: stays on other waitlists, with a link to come off them', () => has(textOf(g3Conf), /You'll stay on any other Akari waitlists you've joined\. If you'd rather come off them, you can remove yourself here: \S+a=leave/));
+  expect('…and in the HTML email that link sits on the word "here" (Jack, T3)', () => has(htmlOf(g3Conf), /remove yourself <a href="[^"]*a=leave"[^>]*>here<\/a>\./));
   expect('they are still on the Daytime list until they choose', () => ({ ok: ['Waiting', 'Primed'].includes(statusOf(G(3), 'Williamsburg', 'Daytime')), detail: statusOf(G(3), 'Williamsburg', 'Daytime') }));
   const leaveView = await openLink(g3Conf, 'leave');
   expect('the "remove me" link opens a confirmation page first', () => has(leaveView.page, /Leave your other waitlists/));
@@ -407,6 +415,21 @@ try {
   expect('both are refused with "link has expired" (410)', () => eq([r.status, r2.status], [410, 410]));
   expect('no data changes', () => eq(JSON.stringify(W()), snap));
 
+  scenario('R10', 'Heads-up replies: one "still interested", one "remove me"', 'Zed presses "I\'m still interested" in the heads-up. Sam presses "Remove me from the waitlist" and writes "Moved to Queens". Sam is also on Greenpoint Daytime, which is paused, so that list got no heads-up.');
+  const zedView = await openLink(zedHU, 'still');
+  expect('the link opens a confirmation page first (mail scanners change nothing)', () => ({ ok: zedView.status === 200 && /Still interested\?/.test(zedView.page) && !rowOf(at(6), 'Williamsburg', 'Unlimited').fields['Interest Confirmed At'], detail: `${zedView.status}` }));
+  r = await confirm(zedHU, 'still');
+  const zedRow = rowOf(at(6), 'Williamsburg', 'Unlimited');
+  expect('Zed: Interest Confirmed At recorded, still Primed (keeps his place)', () => eq([zedRow.fields.Status, !!zedRow.fields['Interest Confirmed At']], ['Primed', true]));
+  expect('"Still Interested" is logged, so staff can see who confirmed', () => eq(LOG().filter((l) => l.fields.Event === 'Still Interested').map((l) => l.fields.Email), [at(6)]));
+  const samHU = inbox(at(4)).find(isHeadsUp);
+  r = await confirm(samHU, 'remove', 'Moved to Queens');
+  expect('Sam: Greenpoint 4-Visit → No Longer Interested with his reason', () => eq([statusOf(at(4), 'Greenpoint', '4-Visit'), rowOf(at(4), 'Greenpoint', '4-Visit').fields.Reason], ['No Longer Interested', 'Moved to Queens']));
+  expect('…his Greenpoint Daytime row (not in that heads-up) is untouched', () => eq(statusOf(at(4), 'Greenpoint', 'Daytime'), 'Waiting'));
+  const huAgain = await form({ t: tokenIn(samHU, 'still'), a: 'still' });
+  expect('pressing a heads-up button again after removing changes nothing', () => ({ ok: huAgain.status < 500 && statusOf(at(4), 'Greenpoint', '4-Visit') === 'No Longer Interested', detail: `${huAgain.status}` }));
+  await settle(1500);
+
   // ═══ DAY 0 · staff actions ═══════════════════════════════════
   scenario('S1', 'Send Now with a bad key', 'Someone edits the Airtable button URL and the key is wrong.');
   const priya = rowOf(at(3), 'Lower East Side', 'Unlimited');
@@ -444,17 +467,27 @@ try {
   expect('reasons given today are listed (Guest02 and Noor)', () => ({ ok: /Too far from me/.test(htmlOf(rep)) && /Back in town in November/.test(htmlOf(rep)), detail: 'one or both reasons missing' }));
   const reportCron = buildMain().nodes.find((n) => n.type === 'n8n-nodes-base.scheduleTrigger' && /Report/.test(n.name))?.parameters.rule.interval[0].expression;
   expect('report is scheduled for 7:30am, before doors open (Jack\'s spec)', () => eq(reportCron, '30 7 * * *'));
-  expect('report layout matches Jack\'s template 4 (Needs attention / Last 24 hours / By location)', () => has(htmlOf(rep), /Invites expiring in the next 24 hours/), 'decision');
+  expect('subject: "Akari Waitlist Daily Summary: <weekday, date>" (Jack\'s template 4)', () => has(rep?.subject, /^Akari Waitlist Daily Summary: [A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}$/));
+  expect('layout follows template 4: Hi team → Needs attention → Last 24 hours → By location → dashboard link → Thank you', () => {
+    const h = htmlOf(rep);
+    const order = ['Hi team,', 'Needs attention', 'Last 24 hours', 'By location', '>here</a>', 'Thank you,'].map((k) => h.indexOf(k));
+    return { ok: order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), detail: JSON.stringify(order) };
+  });
+  expect('Needs attention lists the four counts', () => has(htmlOf(rep), /Invites expiring in the next 24 hours[\s\S]*Tour requests not yet booked[\s\S]*Open spots with no invite sent[\s\S]*due a check-in/));
+  expect('Last 24 hours has Jack\'s six columns', () => has(htmlOf(rep), /New sign-ups[\s\S]*Invites sent[\s\S]*Accepted[\s\S]*Passed[\s\S]*Expired[\s\S]*Tour requests/));
+  expect('By location lists Greenpoint, Williamsburg, Lower East Side', () => has(htmlOf(rep), /By location[\s\S]*Greenpoint[\s\S]*Williamsburg[\s\S]*Lower East Side/));
+  expect('the paused queue is flagged under "Details to check"', () => has(htmlOf(rep), /Greenpoint · Daytime: paused — 490 open spots/));
 
   // ═══ DAY 1 ═══════════════════════════════════════════════════
   travel(HOLD_H + 1);
   scenario('E2', 'The hold window ends: unanswered holds time out, the line moves on', 'Guest01, Guest09, Guest10 never replied. Guest04 changed their mind yesterday and was told they\'re first in line.');
   const e2 = await engine('Day 1 10am');
-  expect('Guest01, Guest09, Guest10 → Warm (1st timeout)', () => eq([G(1), G(9), G(10)].map((e) => [statusOf(e, 'Williamsburg', '4-Visit'), rowOf(e, 'Williamsburg', '4-Visit').fields['Timeout Count']]), [['Warm', 1], ['Warm', 1], ['Warm', 1]]));
+  expect('Guest01, Guest09, Guest10 → No Reply, out of the line (Jack, T8: first miss)', () => eq([G(1), G(9), G(10)].map((e) => [statusOf(e, 'Williamsburg', '4-Visit'), rowOf(e, 'Williamsburg', '4-Visit').fields['Timeout Count']]), [['No Reply', 1], ['No Reply', 1], ['No Reply', 1]]));
   expect('Ava\'s tour hold does not time out', () => eq(statusOf(at(11), 'Williamsburg', 'Unlimited'), 'Tour Requested'));
   const inv2 = e2.logs.filter((l) => l.Event === 'Invited' && l.Membership === '4-Visit').map((l) => l.Email).sort();
   expect('Guest04 (told "first in line") is re-invited straight away', () => ({ ok: inv2.includes(G(4)), detail: `invited: ${inv2.join(', ')}` }));
-  expect('people who simply ignored us (Guest01/09/10) wait out the 72h cool-down', () => eq(inv2.filter((e) => [G(1), G(9), G(10)].includes(e)), []));
+  expect('people who simply ignored us (Guest01/09/10) are not re-invited', () => eq(inv2.filter((e) => [G(1), G(9), G(10)].includes(e)), []));
+  expect('the paused queue alerts again on a new day (not every hour)', () => eq(e2.sent.filter((m) => /^Check Minimum Members/.test(m.subject)).length, 1));
   expect('Guest11 and Guest12 get their turn', () => ({ ok: inv2.includes(G(11)) && inv2.includes(G(12)), detail: `invited: ${inv2.join(', ')}` }));
   expect('Williamsburg Unlimited: no new invite while Cleo\'s signup awaits Jack\'s recount and Ava\'s tour holds the other spot', () => eq(e2.logs.filter((l) => l.Event === 'Invited' && l.Membership === 'Unlimited').length, 0));
 
@@ -462,8 +495,9 @@ try {
   staffEditCapacity('Williamsburg · Unlimited', { 'Active Members': 39, 'Minimum Members': 41 });
   r = await confirm(inv(G(9)), 'yes');
   expect('Guest09 is told the hold passed and they\'re first in line', () => has(r.page, /first in line/));
-  expect('Guest09 stays Warm, reply time recorded', () => eq([statusOf(G(9), 'Williamsburg', '4-Visit'), !!rowOf(G(9), 'Williamsburg', '4-Visit').fields['Response At']], ['Warm', true]));
+  expect('Guest09 is back in line: No Reply → Warm, reply time recorded', () => eq([statusOf(G(9), 'Williamsburg', '4-Visit'), !!rowOf(G(9), 'Williamsburg', '4-Visit').fields['Response At']], ['Warm', true]));
   const e3 = await engine('Day 1 11am');
+  expect('the paused-queue alert is not repeated within 24 hours', () => eq(e3.sent.filter((m) => /^Check Minimum Members/.test(m.subject)).length, 0));
   const inv3 = e3.logs.filter((l) => l.Event === 'Invited').map((l) => l.Name);
   expect('the new Williamsburg Unlimited spot goes to Ben (existing member, 121 days waiting)', () => eq(e3.logs.filter((l) => l.Event === 'Invited' && l.Membership === 'Unlimited').map((l) => l.Name), ['Ben Fischer']));
   expect('Guest09 (late reply) is re-invited; Guest10 (no reply) is not', () => ({ ok: inv3.includes('Guest09 Test') && !inv3.includes('Guest10 Test'), detail: `invited: ${inv3.join(', ')}` }));
@@ -483,14 +517,20 @@ try {
 
   // ═══ DAY 4 ═══════════════════════════════════════════════════
   travel(72);
-  scenario('E4', 'Day 4: cool-downs end, repeat no-shows drop out', 'Three days later. Guest09 ignored their second invite. Ben ignored his.');
+  scenario('E4', 'Day 4: unanswered invites drop out', 'Three days later. Guest09 ignored their second invite. Ben ignored his.');
   const e4 = await engine('Day 4');
   expect('Guest09 (2nd timeout) → No Reply, out of the line', () => eq([statusOf(G(9), 'Williamsburg', '4-Visit'), rowOf(G(9), 'Williamsburg', '4-Visit').fields['Timeout Count']], ['No Reply', 2]));
-  expect('Guest10 (cool-down over) is invited again', () => eq(statusOf(G(10), 'Williamsburg', '4-Visit'), 'Invited'));
-  expect('Ben timed out → Warm; the Williamsburg Unlimited spot goes to Maya (Ben is cooling down)', () => eq([statusOf(at(12), 'Williamsburg', 'Unlimited'), e4.logs.filter((l) => l.Event === 'Invited' && l.Membership === 'Unlimited').map((l) => l.Name)], ['Warm', ['Maya Chen']]));
+  expect('Guest10 (No Reply) stays out of the line until staff put them back', () => eq(statusOf(G(10), 'Williamsburg', '4-Visit'), 'No Reply'));
+  expect('Ben timed out → No Reply; the Williamsburg Unlimited spot goes to Maya', () => eq([statusOf(at(12), 'Williamsburg', 'Unlimited'), e4.logs.filter((l) => l.Event === 'Invited' && l.Membership === 'Unlimited').map((l) => l.Name)], ['No Reply', ['Maya Chen']]));
   const mayaInv = inbox(at(1)).filter(isInvite).at(-1);
   await confirm(mayaInv, 'tour', 'Saturday morning');
   expect('Maya asks for a tour; the alert reads "an Unlimited membership"', () => has(textOf(inbox(TEAM).filter((m) => /Tour Request: Maya/.test(m.subject)).at(-1)), /committing to an Unlimited membership/));
+
+  scenario('S7', 'Jack puts a No Reply person back in the queue', 'Guest10 phones to say the invite went to spam. Jack changes their Status from No Reply to Warm in Airtable.');
+  W().find((x) => x.fields.Email === G(10) && x.fields.Membership === '4-Visit').fields.Status = 'Warm';
+  const s7 = await engine('Day 4, next hour');
+  expect('the next hourly run invites Guest10 first (Warm = front of the line)', () => eq(s7.logs.filter((l) => l.Event === 'Invited' && l.Membership === '4-Visit').map((l) => l.Email)[0], G(10)));
+  expect('Guest10 receives a fresh invite email', () => ({ ok: inbox(G(10)).filter(isInvite).length === 2, detail: `${inbox(G(10)).filter(isInvite).length} invites` }));
 
   // ═══ DAY 12 ══════════════════════════════════════════════════
   travel(24 * 8);
@@ -501,7 +541,7 @@ try {
   rep = mails().slice(mark).find((m) => toOf(m).includes(TEAM));
   expect('flags Maya\'s tour request: no tour time booked, spot still held', () => has(htmlOf(rep), /Maya Chen \(Unlimited at Williamsburg\) asked for a tour on .* has no tour time booked yet/));
   expect('flags Greenpoint Summer Pass: open spot, nobody left to invite', () => has(htmlOf(rep), /Greenpoint · Summer Pass: 1 open spot\(s\) but nobody left on the waitlist/));
-  expect('lists "Not ready yet" people due a check-in (Noor)', () => has(htmlOf(rep), /Noor/), 'decision');
+  expect('Noor (12 days "not ready") is not yet due a check-in: count is 0', () => has(htmlOf(rep), /due a check-in \(60\+ days\)<\/td><td[^>]*>0</));
 
   scenario('X1', 'The hourly run starts just as people reply', 'Jack uses Send Now for Jo and Leo. Their replies land in the same second the hourly engine starts — more than Airtable\'s 5 requests/second, so the base locks for 30s.');
   await sendNow(rowOf(at(7), 'Williamsburg', 'Unlimited').id);
@@ -530,6 +570,17 @@ try {
   const x1 = await engine('Day 12, next hour');
   expect('the next hourly run completes normally', () => ({ ok: !inbox(TEAM).filter((m) => m.subject.startsWith('[Waitlist automation]')).slice(x1Alerts + x1New.length).length, detail: 'another alert fired' }));
   timeline.push(`${dayLabel()} · follow-up run sent ${x1.sent.length} email(s)`);
+
+  // ═══ DAY 62 ══════════════════════════════════════════════════
+  travel(24 * 50);
+  scenario('D3', 'Day 62 report: "not ready yet" check-ins', 'Noor said "not ready" 62 days ago; Leo said it 50 days ago.');
+  mark = mails().length;
+  await post('test-report', {});
+  await settle();
+  rep = mails().slice(mark).find((m) => toOf(m).includes(TEAM));
+  expect('Needs attention counts 1 "not ready yet" person due a check-in', () => has(htmlOf(rep), /due a check-in \(60\+ days\)<\/td><td[^>]*>1</));
+  expect('the check-in list names Noor with her email, queue and reason', () => has(htmlOf(rep), /Noor Haddad<\/td><td[^>]*>stan\+5@optimizewise\.org<\/td><td[^>]*>Summer Pass at Greenpoint<\/td><td[^>]*>[^<]+<\/td><td[^>]*>Back in town in November</));
+  expect('Leo (50 days) is not listed yet', () => hasNot(htmlOf(rep), /Leo Brooks<\/td>/));
 
   // ═══ Whole-run integrity ═════════════════════════════════════
   scenario('I1', 'Data integrity across the whole run', 'What Jack would spot-check in Airtable and the inbox.');

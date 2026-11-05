@@ -39,6 +39,16 @@ const acts = [];
 const update = (entry, fields, email, log) => acts.push({ recordId: entry.id, fields, email, log });
 const listOf = (xs) => xs.map((x) => `${x.membership} at ${x.location}`);
 
+// The "almost up" email only carries "still" and "remove", and those only apply while the person is Primed.
+// (Anything else with a heads-up token, e.g. a hand-made "yes" link, must not move them up the line.)
+const HEADS_UP_ACTIONS = ['still', 'remove'];
+if (e.status === 'Primed' && !HEADS_UP_ACTIONS.includes(action)) {
+  return reply(400, 'Something went wrong', '<p>We couldn\'t read that response. Please use the buttons in your email.</p>');
+}
+if (HEADS_UP_ACTIONS.includes(action) && e.status !== 'Primed') {
+  return reply(200, 'Nothing to change', '<p>Thanks — there\'s nothing to update on your waitlist entry. If you have a question, just reply to any of our emails.</p>');
+}
+
 if (e.status === 'Removed' && action !== 'leave') {
   return reply(200, 'You\'re no longer on this waitlist', '<p>This waitlist entry has already been closed. If that\'s a mistake, just reply to any of our emails.</p>');
 }
@@ -131,6 +141,21 @@ switch (action) {
   case 'no':
     update(e, { Status: 'No Longer Interested', 'Response At': nowIso, Reason: note }, null, logRow(e, 'No Longer Interested', { Reason: note }));
     return reply(200, 'You\'ve been removed', '<p>Thanks for letting us know — we won\'t contact you about this waitlist again.</p>', acts);
+  case 'still':
+  case 'remove': {
+    // Everyone primed in the same run as this row (same email, same Primed At) was named in the same email.
+    const group = [e, ...others.filter((o) => o.status === 'Primed' && o.primedAt && e.primedAt && o.primedAt.getTime() === e.primedAt.getTime())];
+    const named = esc(listOf(group).join(' and '));
+    if (action === 'still') {
+      if (e.interestConfirmedAt) return reply(200, 'Thanks, you\'re all set', '<p>You\'ve already confirmed. You keep your place in line, and we\'ll email you as soon as a spot opens.</p>');
+      for (const g of group) update(g, { 'Interest Confirmed At': nowIso }, null, logRow(g, 'Still Interested', { Detail: 'Confirmed from the "almost up" email' }));
+      return reply(200, 'Thanks for letting us know', `<p>You keep your place in line for the ${named}, and we'll email you as soon as a spot opens.</p>`, acts);
+    }
+    for (const g of group) {
+      update(g, { Status: 'No Longer Interested', 'Response At': nowIso, Reason: note }, null, logRow(g, 'No Longer Interested', { Reason: note, Detail: 'Removed themselves from the "almost up" email' }));
+    }
+    return reply(200, 'You\'ve been removed', `<p>Thanks for letting us know. You've been taken off the waitlist for the ${named}, and we won't contact you about it again.</p>`, acts);
+  }
   case 'leave': {
     if (!others.length) return reply(200, 'All done', '<p>You\'re not on any other Akari waitlists.</p>');
     for (const o of others) {

@@ -23,7 +23,7 @@ if (!TOKEN || (!BASE && !WORKSPACE)) {
 const LOCATIONS = ['Williamsburg', 'Greenpoint', 'Lower East Side'];
 const MEMBERSHIPS = ['Unlimited', 'Daytime', '4-Visit', 'Summer Pass'];
 const STATUSES = ['Waiting', 'Primed', 'Invited', 'Tour Requested', 'Warm', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'No Reply', 'Removed'];
-const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released'];
+const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released', 'Still Interested', 'Queue Paused'];
 
 const select = (names) => ({ type: 'singleSelect', options: { choices: names.map((name) => ({ name })) } });
 const dateTime = { type: 'dateTime', options: { timeZone: 'America/New_York', dateFormat: { name: 'iso' }, timeFormat: { name: '24hour' } } };
@@ -45,7 +45,7 @@ const TABLES = [
       ['Invite Token', text], ['Invited At', dateTime], ['Invite Expires At', dateTime],
       ['Invite Source', select(['Auto', 'Send Now'])], ['Timeout Count', integer],
       ['Primed At', dateTime], ['Response At', dateTime],
-      ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Notes', long],
+      ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Interest Confirmed At', dateTime], ['Notes', long],
     ],
   },
   {

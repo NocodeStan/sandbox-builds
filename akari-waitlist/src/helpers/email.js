@@ -29,8 +29,8 @@ function inviteEmail(e, token, expires) {
   const costLine = price
     ? `The cost for your membership will be $${price}/month, and additional membership details can be found on our membership page here ${CFG.membershipPageUrl}.`
     : `Additional membership details, including pricing, can be found on our membership page here ${CFG.membershipPageUrl}.`;
-  const pageLink = `<a href="${esc(CFG.membershipPageUrl)}" style="color:#1f1d1a">${esc(CFG.membershipPageUrl)}</a>`;
-  const costHtml = esc(costLine).replace(esc(CFG.membershipPageUrl), pageLink);
+  const pageLink = `<a href="${esc(CFG.membershipPageUrl)}" style="color:#1f1d1a">here</a>`;
+  const costHtml = esc(costLine).replace(`here ${esc(CFG.membershipPageUrl)}`, pageLink);
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
 <p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at Akari ${esc(e.location)}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
@@ -78,7 +78,7 @@ function confirmationEmail(e, signupUrl, { removedOthers = false, stillOn = fals
   const overlap = removedOthers
     ? `<p>Once you sign up for your Unlimited membership, we'll automatically remove you from any other Akari waitlists you've joined.</p>`
     : stillOn
-      ? `<p>You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself here: <a href="${esc(leave)}" style="color:#1f1d1a">${esc(leave)}</a></p>`
+      ? `<p>You'll stay on any other Akari waitlists you've joined. If you'd rather come off them, you can remove yourself <a href="${esc(leave)}" style="color:#1f1d1a">here</a>.</p>`
       : '';
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>

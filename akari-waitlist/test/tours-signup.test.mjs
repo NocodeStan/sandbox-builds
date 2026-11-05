@@ -105,7 +105,7 @@ test('booking lookup can\'t be broken by a crafted email or tag', () => {
 
 // ── Engine: release a tour hold after the tour ───────────────
 const plan = (caps, entries, cfg = {}) => runNode('plan-engine-actions', {
-  nodes: { Config: [{ json: { cfg: baseConfig(cfg) } }], 'Get Capacity': records(caps), 'Get Active Entries': records(entries) },
+  nodes: { Config: [{ json: { cfg: baseConfig(cfg) } }], 'Get Capacity': records(caps), 'Get Active Entries': records(entries), 'Get Recent Pause Alerts': records([]) },
 }).map((i) => i.json);
 
 test('tour hold released 48h after the tour if no sign-up link was sent → Not Right Now, and the freed spot goes to the next person', () => {
@@ -211,6 +211,7 @@ test('daily report: tours booked and released are counted; released tours and un
       'Get Log (30 days)': records([log('Tour Booked'), log('Tour Released', { id: 'recB' })]),
       'Get Queue Snapshot': records([unbooked, booked]),
       'Get Capacity (report)': records([{ fields: capacity().fields }]),
+      'Get Not Right Now (report)': records([]),
     },
   });
   const html = json.payload.content[1].value;

@@ -43,8 +43,11 @@ const cfg = {
   primeCount: 10, // "next ~10 in line" get the early heads-up
   newMemberWeight: 3, // 1 new signup ≈ 3 existing-member upgrades
   warmCooldownHours: 72, // a timed-out person is first in line again after this
-  timeoutsBeforeNoReply: 2, // 1st timeout → Warm, 2nd → No Reply bucket
-  maxInvitesPerQueuePerRun: 10, // guardrail against a mistyped minimum
+  timeoutsBeforeNoReply: 1, // no reply to an invite → No Reply bucket, out of the line (Jack, 5 Nov). 2 = one more chance via Warm first
+  maxInvitesPerQueuePerRun: 10, // most invites one queue sends in one hourly run
+  pauseIfOpenSpotsOver: 15, // more open spots than this looks like a typo in Minimum/Active: the queue sends nothing and the team is emailed (once a day). Raise it when opening a new location
+  notReadyFollowUpDays: 60, // "Not ready yet" people are listed in the daily summary for a check-in after this many days
+  dashboardUrl: '', // link at the end of the daily summary; blank = the Airtable base
 };
 
 const base = `${cfg.airtableApi}/${cfg.airtableBaseId}`;

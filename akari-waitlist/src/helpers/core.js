@@ -40,7 +40,9 @@ function normEntry(r) {
     primedAt: toDate(f['Primed At']),
     responseAt: toDate(f['Response At']),
     tourNotes: f['Tour Notes'] || '',
+    reason: f['Reason'] || '',
     tourAt: toDate(f['Tour At']),
+    interestConfirmedAt: toDate(f['Interest Confirmed At']),
   };
 }
 
