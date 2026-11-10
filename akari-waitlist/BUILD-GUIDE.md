@@ -219,11 +219,7 @@ A yes/no question containing "existing … member" sets Member Type. A short-tex
 ### 4.8 Glofox member sync (`akari-glofox-member-sync.json`)
 Keeps **Active Members** true to Glofox, once a day at 5:30am New York (before the 7:30 summary and the first 8am invites).
 
-1. n8n → **Credentials → New → Custom Auth**, name `Glofox API (Akari)`, JSON:
-   ```json
-   { "headers": { "x-api-key": "…", "x-glofox-api-token": "…", "x-proxy-key": "…" } }
-   ```
-   (the same three values the Glofox nodes use today). Open **Glofox Members** in the sync workflow and pick it.
+1. n8n → **Credentials → New → Multiple Headers Auth**, name `Glofox_headers`, with three headers: `x-api-key`, `x-glofox-api-token`, `x-proxy-key` (the same values the Glofox nodes use today). Open **Glofox Members** in the sync workflow and pick it.
 2. **Config** in the sync: `airtableBaseId`, `glofoxApi` (proxy base, ending `/prod`), `branches` (Glofox branch IDs: Williamsburg `64c98…`, Greenpoint `67cf4…`, LES `6a174…`), `countStatuses` (`['ACTIVE']`, Jack, 10 Nov).
 3. Capacity › **Glofox Memberships**: the Glofox membership names counted for that row, one per line, spelled as Glofox shows them (e.g. `Unlimited Membership` and `Unlimited Membership - Founding Members` both count for Williamsburg · Unlimited). Rows with this column empty are left alone.
 4. Settings → Error workflow → **Akari Waitlist · Error Alert**, then **Publish**. **Run Now** runs it on demand.

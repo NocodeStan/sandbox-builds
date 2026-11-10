@@ -78,7 +78,7 @@
       "parameters": {
         "url": "={{ $('Config').first().json.cfg.glofoxApi }}/2.0/members",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpCustomAuth",
+        "genericAuthType": "httpMultipleHeadersAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -135,9 +135,9 @@
         80
       ],
       "credentials": {
-        "httpCustomAuth": {
-          "id": "akariGlofoxAPI",
-          "name": "Glofox API (Akari)"
+        "httpMultipleHeadersAuth": {
+          "id": "akariGlofoxHeaders",
+          "name": "Glofox_headers"
         }
       },
       "retryOnFail": true,

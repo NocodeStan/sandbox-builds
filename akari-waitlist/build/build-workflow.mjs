@@ -23,8 +23,8 @@ const uid = (seed) => {
 export const CREDS = {
   airtable: { httpHeaderAuth: { id: 'akariAirtablePAT', name: 'Airtable PAT (Akari)' } },
   sendgrid: { httpHeaderAuth: { id: 'akariSendGridKey', name: 'SendGrid API Key (Akari)' } },
-  // Custom Auth credential holding the Glofox headers (x-api-key, x-glofox-api-token, x-proxy-key).
-  glofox: { httpCustomAuth: { id: 'akariGlofoxAPI', name: 'Glofox API (Akari)' } },
+  // Multiple Headers Auth credential holding the Glofox headers (x-api-key, x-glofox-api-token, x-proxy-key).
+  glofox: { httpMultipleHeadersAuth: { id: 'akariGlofoxHeaders', name: 'Glofox_headers' } },
 };
 
 const node = (name, type, typeVersion, position, parameters, extra = {}) => ({
@@ -445,7 +445,7 @@ export function buildGlofoxSync() {
     node('Glofox Members', 'n8n-nodes-base.httpRequest', 4.2, [660, 80], {
       url: `={{ ${CFG('glofoxApi')} }}/2.0/members`,
       authentication: 'genericCredentialType',
-      genericAuthType: 'httpCustomAuth',
+      genericAuthType: 'httpMultipleHeadersAuth',
       sendQuery: true,
       queryParameters: { parameters: [{ name: 'limit', value: '100' }, { name: 'page', value: '1' }] },
       sendHeaders: true,
