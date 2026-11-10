@@ -48,6 +48,15 @@ const noRow = [...new Set(live.map((e) => `${e.location}|${e.membership}`))].fil
 for (const k of noRow) attention.push(`${k.replace('|', ' · ')}: ${live.filter((e) => `${e.location}|${e.membership}` === k).length} on the waitlist but no Capacity row, so nobody is invited. Add a row with this exact Location and Membership.`);
 for (const f of today.filter((x) => x.Event === 'Joined' && x.Detail)) attention.push(`Form submission from ${f.Email}: ${f.Detail}`);
 
+// ── Glofox member sync: did it run, and is anything waiting on staff? ──
+const synced = caps.some((c) => String(c['Glofox Memberships'] || '').trim());
+const lastSync = logs.filter((f) => f.Event === 'Active Synced').sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp))[0];
+if (synced && (!lastSync || NOW - new Date(lastSync.Timestamp) > 26 * HOUR)) {
+  attention.push('The Glofox member sync has not run in the last day, so Active Members may be out of date. Check the "Akari Waitlist · Glofox Member Sync" workflow is published.');
+} else if (lastSync && NOW - new Date(lastSync.Timestamp) <= 26 * HOUR) {
+  for (const line of String(lastSync.Detail || '').split('\n')) if (/^(Held back|Glofox Memberships names not found)/.test(line)) attention.push(`Glofox sync: ${line}`);
+}
+
 // ── Needs attention (Jack's three lines, plus the 60-day "not ready yet" check-ins) ──
 const expiring = live.filter((e) => e.status === 'Invited' && e.expiresAt && e.expiresAt > NOW && e.expiresAt - NOW <= DAY);
 const unbooked = live.filter((e) => e.status === 'Tour Requested' && !e.tourAt);

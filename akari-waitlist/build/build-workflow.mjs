@@ -23,6 +23,8 @@ const uid = (seed) => {
 export const CREDS = {
   airtable: { httpHeaderAuth: { id: 'akariAirtablePAT', name: 'Airtable PAT (Akari)' } },
   sendgrid: { httpHeaderAuth: { id: 'akariSendGridKey', name: 'SendGrid API Key (Akari)' } },
+  // Custom Auth credential holding the Glofox headers (x-api-key, x-glofox-api-token, x-proxy-key).
+  glofox: { httpCustomAuth: { id: 'akariGlofoxAPI', name: 'Glofox API (Akari)' } },
 };
 
 const node = (name, type, typeVersion, position, parameters, extra = {}) => ({
@@ -431,10 +433,74 @@ export function buildErrorWorkflow() {
   };
 }
 
+// Daily: count ACTIVE Glofox members per Capacity row (its "Glofox Memberships" names) and update Active Members.
+export function buildGlofoxSync() {
+  const to = (n) => [{ node: n, type: 'main', index: 0 }];
+  const nodes = [
+    sticky('Note: Glofox Sync', [-60, -260], 1700, 200, '### Glofox member sync (daily 5:30am New York)\nReads every member of each branch in **Config**, counts the ones whose membership status is in `countStatuses`, and sets **Active Members** on each Capacity row from the Glofox membership names listed in its **Glofox Memberships** column (one per line). Stamps **Active Counted At**, which the waitlist engine treats as a recount. Stops without changing anything if Glofox returns an error or an incomplete list; a count that falls by more than half is held back and flagged. One **Active Synced** row in the Activity Log says what changed and which Glofox memberships are not counted anywhere.', 7),
+    cron('Daily 5:30am', [0, 0], '30 5 * * *'),
+    node('Run Now', 'n8n-nodes-base.manualTrigger', 1, [0, 180], {}),
+    code('Config', [220, 80], 'glofox-sync-config'),
+    code('Branches', [440, 80], 'glofox-branches'),
+    node('Glofox Members', 'n8n-nodes-base.httpRequest', 4.2, [660, 80], {
+      url: `={{ ${CFG('glofoxApi')} }}/2.0/members`,
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendQuery: true,
+      queryParameters: { parameters: [{ name: 'limit', value: '100' }, { name: 'page', value: '1' }] },
+      sendHeaders: true,
+      headerParameters: { parameters: [{ name: 'x-glofox-branch-id', value: '={{ $json.branch }}' }, { name: 'Content-Type', value: 'application/json' }] },
+      options: {
+        pagination: {
+          pagination: {
+            parameters: { parameters: [{ type: 'qs', name: 'page', value: '={{ $pageCount + 1 }}' }] },
+            paginationCompleteWhen: 'other',
+            completeExpression: '={{ !$response.body.has_more }}',
+            limitPagesFetched: true,
+            maxRequests: 200,
+            requestInterval: 250,
+          },
+        },
+      },
+    }, { credentials: CREDS.glofox, ...RETRY }),
+    code('Count Members', [880, 80], 'glofox-count'),
+    airtableGet('Get Capacity', [1100, 80], 'capacity', '', { executeOnce: true }),
+    code('Plan Active Updates', [1320, 80], 'glofox-plan', { executeOnce: true }),
+    ifTrue('Anything to Write?', [1540, 80], '($json.chunks || []).length > 0'),
+    code('Split Updates', [1760, 0], 'glofox-split', { executeOnce: true }),
+    httpJson('Update Capacity', [1980, 0], 'PATCH', `={{ ${CFG('urls.capacity')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
+    httpJson('Log Sync', [2200, 80], 'POST', `={{ ${CFG('urls.log')} }}`, "={{ JSON.stringify($('Plan Active Updates').first().json.log) }}", CREDS.airtable, {}, { executeOnce: true }),
+  ];
+  return {
+    name: 'Akari Waitlist · Glofox Member Sync',
+    nodes,
+    connections: {
+      'Daily 5:30am': { main: [to('Config')] },
+      'Run Now': { main: [to('Config')] },
+      Config: { main: [to('Branches')] },
+      Branches: { main: [to('Glofox Members')] },
+      'Glofox Members': { main: [to('Count Members')] },
+      'Count Members': { main: [to('Get Capacity')] },
+      'Get Capacity': { main: [to('Plan Active Updates')] },
+      'Plan Active Updates': { main: [to('Anything to Write?')] },
+      'Anything to Write?': { main: [to('Split Updates'), to('Log Sync')] },
+      'Split Updates': { main: [to('Update Capacity')] },
+      'Update Capacity': { main: [to('Log Sync')] },
+    },
+    pinData: {},
+    active: false,
+    settings: { executionOrder: 'v1', timezone: 'America/New_York', saveDataErrorExecution: 'all', saveDataSuccessExecution: 'none', callerPolicy: 'workflowsFromSameOwner' },
+    meta: { templateCredsSetupCompleted: false },
+    tags: [],
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const main = buildMain();
   const err = buildErrorWorkflow();
+  const sync = buildGlofoxSync();
   writeFileSync(join(ROOT, 'n8n/akari-waitlist-automation.json'), `${JSON.stringify(main, null, 2)}\n`);
   writeFileSync(join(ROOT, 'n8n/akari-waitlist-error-alert.json'), `${JSON.stringify(err, null, 2)}\n`);
-  console.log(`main: ${main.nodes.length} nodes · error: ${err.nodes.length} nodes`);
+  writeFileSync(join(ROOT, 'n8n/akari-glofox-member-sync.json'), `${JSON.stringify(sync, null, 2)}\n`);
+  console.log(`main: ${main.nodes.length} nodes · error: ${err.nodes.length} nodes · glofox sync: ${sync.nodes.length} nodes`);
 }

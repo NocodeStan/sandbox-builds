@@ -216,6 +216,22 @@ A yes/no question containing "existing … member" sets Member Type. A short-tex
 
 ---
 
+### 4.8 Glofox member sync (`akari-glofox-member-sync.json`)
+Keeps **Active Members** true to Glofox, once a day at 5:30am New York (before the 7:30 summary and the first 8am invites).
+
+1. n8n → **Credentials → New → Custom Auth**, name `Glofox API (Akari)`, JSON:
+   ```json
+   { "headers": { "x-api-key": "…", "x-glofox-api-token": "…", "x-proxy-key": "…" } }
+   ```
+   (the same three values the Glofox nodes use today). Open **Glofox Members** in the sync workflow and pick it.
+2. **Config** in the sync: `airtableBaseId`, `glofoxApi` (proxy base, ending `/prod`), `branches` (Glofox branch IDs: Williamsburg `64c98…`, Greenpoint `67cf4…`, LES `6a174…`), `countStatuses` (`['ACTIVE']`, Jack, 10 Nov).
+3. Capacity › **Glofox Memberships**: the Glofox membership names counted for that row, one per line, spelled as Glofox shows them (e.g. `Unlimited Membership` and `Unlimited Membership - Founding Members` both count for Williamsburg · Unlimited). Rows with this column empty are left alone.
+4. Settings → Error workflow → **Akari Waitlist · Error Alert**, then **Publish**. **Run Now** runs it on demand.
+
+What it does: pages through every member of each branch (about 45 requests, ~15 seconds), counts each person once, adds up each row's names, writes **Active Members** only where the number changed, and stamps **Active Counted At** on every mapped row (the engine treats that as a recount, so sign-ups before it stop counting as pending). Safety: an error page, a missing branch or an incomplete list stops the run with nothing changed (and the error alert fires); a count that falls by more than half (`maxDropShare`) is held back and flagged. Each run writes one **Active Synced** row to the Activity Log listing what changed, mapped names Glofox doesn't know, and Glofox memberships not counted in any queue. The daily summary flags a sync that hasn't run in a day, held-back counts and unknown names. Successful runs don't save execution data in n8n, so member details aren't kept there.
+
+---
+
 ## 5. Node-by-node reference
 
 ### Shared entry
@@ -365,7 +381,7 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 ## 8. Airtable schema (manual build)
 **Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes (long text) · Tour At · Interest Confirmed At (date-time) · Notes (long text) · Priority Score (formula, see `airtable/setup-airtable.mjs`) · Send Now (button) · Send Sign-up Link (button).
 
-**Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select; new options are added automatically) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Active Counted At (date-time, written by the Glofox sync) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL) · Price (currency) · Tour Booking URL (URL).
+**Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select; new options are added automatically) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Active Counted At (date-time, written by the Glofox sync) · Glofox Memberships (long text, one Glofox name per line) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL) · Price (currency) · Tour Booking URL (URL).
 
 **Activity Log** — Summary (text, primary) · Timestamp (date-time) · Event (single select) · Email · Name · Location · Membership · Source (text) · Reason · Detail (long text) · Entry ID (text).
 

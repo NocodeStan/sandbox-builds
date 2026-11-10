@@ -1,0 +1,487 @@
+{
+  "name": "Akari Waitlist · Glofox Member Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Glofox member sync (daily 5:30am New York)\nReads every member of each branch in **Config**, counts the ones whose membership status is in `countStatuses`, and sets **Active Members** on each Capacity row from the Glofox membership names listed in its **Glofox Memberships** column (one per line). Stamps **Active Counted At**, which the waitlist engine treats as a recount. Stops without changing anything if Glofox returns an error or an incomplete list; a count that falls by more than half is held back and flagged. One **Active Synced** row in the Activity Log says what changed and which Glofox memberships are not counted anywhere.",
+        "height": 200,
+        "width": 1700,
+        "color": 7
+      },
+      "id": "8df1704f-8b21-4364-a715-ee233a0950b0",
+      "name": "Note: Glofox Sync",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 5 * * *"
+            }
+          ]
+        }
+      },
+      "id": "6c2d72a9-7637-427a-a4a6-e7b3b1536eb7",
+      "name": "Daily 5:30am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "5a10cec6-ad9a-487e-a474-1372b31add26",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────\n//  AKARI · GLOFOX MEMBER SYNC · CONFIG\n//  Once a day: count active Glofox members per Capacity row and update Active Members.\n// ─────────────────────────────────────────────────────────────\nconst cfg = {\n  airtableBaseId: 'appXXXXXXXXXXXXXX', // same base as the waitlist workflow\n  airtableApi: 'https://api.airtable.com/v0',\n  tables: { capacity: 'Capacity', log: 'Activity Log' },\n\n  glofoxApi: 'https://YOUR-GLOFOX-PROXY/prod', // Glofox API base (your proxy), no trailing slash\n  // Each branch's members are listed with that branch's ID. A member is counted once, however many branches list them.\n  branches: [\n    { id: '64c9870292e260894f0247a4', name: 'Williamsburg' },\n    { id: '67cf4fe8ef346c3817003b8f', name: 'Greenpoint' },\n    { id: '6a1741e58f61326070010c0a', name: 'LES' },\n  ],\n\n  countStatuses: ['ACTIVE'], // membership statuses that count as an active member (Jack, 10 Nov: ACTIVE only)\n  maxDropShare: 0.5, // a queue whose count falls by more than this share in one day is not written; it is flagged instead\n  minRowsForDropCheck: 20, // ...only for queues with at least this many active members today\n};\n\nconst base = `${cfg.airtableApi}/${cfg.airtableBaseId}`;\ncfg.urls = {\n  capacity: `${base}/${encodeURIComponent(cfg.tables.capacity)}`,\n  log: `${base}/${encodeURIComponent(cfg.tables.log)}`,\n};\n\nreturn [{ json: { cfg } }];\n"
+      },
+      "id": "58c9e74e-14bb-4731-a7ff-cddf10a6956d",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per Glofox branch; the next node pages through that branch's member list.\nconst { cfg } = $('Config').first().json;\nreturn cfg.branches.map((b) => ({ json: { branch: b.id, name: b.name } }));\n"
+      },
+      "id": "a034e86f-a5ec-4755-aa53-e8d48bacccc1",
+      "name": "Branches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.glofoxApi }}/2.0/members",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-glofox-branch-id",
+              "value": "={{ $json.branch }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.has_more }}",
+              "limitPagesFetched": true,
+              "maxRequests": 200,
+              "requestInterval": 250
+            }
+          }
+        }
+      },
+      "id": "53ebafc2-4fb4-40b4-a4b0-3b46b522be76",
+      "name": "Glofox Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "akariGlofoxAPI",
+          "name": "Glofox API (Akari)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Counts members per Glofox membership name, for the statuses in countStatuses.\n// Refuses to continue on an error page or an incomplete list, so a partial read never overwrites Active Members.\nconst { cfg } = $('Config').first().json;\nconst statuses = new Set(cfg.countStatuses.map((s) => String(s).toUpperCase()));\nconst pages = $input.all().map((i) => i.json);\n\nconst problems = [];\nconst seen = new Set();\nconst perBranch = {}; // branch id → { expected, got }\nconst counts = {}; // lower-case membership name → { name, n }\nfor (const p of pages) {\n  if (!p || p.success === false || p.message || !Array.isArray(p.data)) {\n    problems.push(String((p && (p.message || p.error)) || 'unreadable page').slice(0, 200));\n    continue;\n  }\n  for (const m of p.data) {\n    const b = m.branch_id || '?';\n    perBranch[b] = perBranch[b] || { expected: Number(p.total_count) || 0, got: 0 };\n    perBranch[b].got += 1;\n    if (seen.has(m._id)) continue;\n    seen.add(m._id);\n    const ms = m.membership || {};\n    if (!ms.membership_name || !statuses.has(String(ms.status || '').toUpperCase())) continue;\n    const key = ms.membership_name.trim().toLowerCase();\n    counts[key] = counts[key] || { name: ms.membership_name.trim(), n: 0 };\n    counts[key].n += 1;\n  }\n}\nfor (const b of cfg.branches) {\n  const r = perBranch[b.id];\n  if (!r) problems.push(`${b.name}: no members returned`);\n  else if (Math.abs(r.got - r.expected) > Math.max(5, r.expected * 0.01)) problems.push(`${b.name}: read ${r.got} of ${r.expected} members`);\n}\nif (problems.length) throw new Error(`Glofox sync stopped, nothing was changed: ${[...new Set(problems)].join('; ')}`);\n\nreturn [{ json: { counts, members: seen.size, perBranch } }];\n"
+      },
+      "id": "6c700bb6-07e8-4cbe-ad8f-edfee673b7b6",
+      "name": "Count Members",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.cfg.urls.capacity }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "offset",
+                    "value": "={{ $response.body.offset }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.offset }}",
+              "limitPagesFetched": true,
+              "maxRequests": 100,
+              "requestInterval": 500
+            }
+          }
+        }
+      },
+      "id": "078b86b8-864f-408e-a115-5c4db1bc18f7",
+      "name": "Get Capacity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "akariAirtablePAT",
+          "name": "Airtable PAT (Akari)"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Works out each Capacity row's Active Members from its \"Glofox Memberships\" names (one per line)\n// and prepares the Airtable updates plus one Activity Log row describing what happened.\nconst { cfg } = $('Config').first().json;\nconst { counts, members } = $('Count Members').first().json;\nconst rows = $('Get Capacity').all().flatMap((i) => i.json.records || []);\nconst NOW = new Date().toISOString();\n\nconst used = new Set();\nconst updated = [];\nconst held = [];\nconst missing = [];\nlet unchanged = 0;\nconst writes = [];\nfor (const r of rows) {\n  const names = String(r.fields['Glofox Memberships'] || '').split('\\n').map((s) => s.trim()).filter(Boolean);\n  if (!names.length) continue;\n  const label = r.fields.Queue || `${r.fields.Location} · ${r.fields.Membership}`;\n  let n = 0;\n  for (const name of names) {\n    const key = name.toLowerCase();\n    used.add(key);\n    if (counts[key]) n += counts[key].n;\n    else missing.push(`${label}: \"${name}\"`);\n  }\n  const current = Number(r.fields['Active Members'] || 0);\n  if (current >= cfg.minRowsForDropCheck && n < current * (1 - cfg.maxDropShare)) {\n    held.push(`${label} ${current} → ${n}`);\n    continue;\n  }\n  const fields = { 'Active Counted At': NOW };\n  if (n !== current) { fields['Active Members'] = n; updated.push(`${label} ${current} → ${n}`); } else unchanged += 1;\n  writes.push({ id: r.id, fields });\n}\nconst notCounted = Object.entries(counts).filter(([k]) => !used.has(k)).sort((a, b) => b[1].n - a[1].n).map(([, v]) => `${v.name} (${v.n})`);\n\nconst detail = [\n  updated.length ? `Updated: ${updated.join('; ')}` : 'No changes to Active Members.',\n  `Unchanged: ${unchanged} queue(s). ${members} Glofox members read.`,\n  held.length ? `Held back, count fell by more than ${Math.round(cfg.maxDropShare * 100)}% (check Glofox, then type the number in if it's right): ${held.join('; ')}` : '',\n  missing.length ? `Glofox Memberships names not found in Glofox (typo, or nobody active on it): ${missing.join('; ')}` : '',\n  notCounted.length ? `Active in Glofox but not counted in any queue: ${notCounted.join(', ')}` : '',\n].filter(Boolean).join('\\n');\n\nconst chunks = [];\nfor (let i = 0; i < writes.length; i += 10) chunks.push({ records: writes.slice(i, i + 10), typecast: true });\nreturn [{\n  json: {\n    chunks,\n    log: { records: [{ fields: { Summary: `Glofox sync · ${updated.length} queue(s) updated`, Timestamp: NOW, Event: 'Active Synced', Source: 'Glofox', Detail: detail } }], typecast: true },\n    updated, held, missing, notCounted,\n  },\n}];\n"
+      },
+      "id": "49f3d353-6a9d-4102-a027-9b2926a63667",
+      "name": "Plan Active Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        80
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a5da9f5b-435b-4388-a2ff-10f9e05036bd",
+              "leftValue": "={{ ($json.chunks || []).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c774249f-bb9a-4186-ab07-2c2eea4b75d4",
+      "name": "Anything to Write?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per 10-row Airtable update.\nreturn $('Plan Active Updates').first().json.chunks.map((c) => ({ json: c }));\n"
+      },
+      "id": "b1d3b729-b138-4af4-a3f4-4abcf80b5224",
+      "name": "Split Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.cfg.urls.capacity }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      },
+      "id": "acfcbdee-7c23-4757-a063-3b48be5e1c31",
+      "name": "Update Capacity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "akariAirtablePAT",
+          "name": "Airtable PAT (Akari)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.urls.log }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Plan Active Updates').first().json.log) }}",
+        "options": {}
+      },
+      "id": "ad02c1e6-f1e9-4482-a624-a158fc33a9aa",
+      "name": "Log Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "akariAirtablePAT",
+          "name": "Airtable PAT (Akari)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Daily 5:30am": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branches": {
+      "main": [
+        [
+          {
+            "node": "Glofox Members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Glofox Members": {
+      "main": [
+        [
+          {
+            "node": "Count Members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Members": {
+      "main": [
+        [
+          {
+            "node": "Get Capacity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Capacity": {
+      "main": [
+        [
+          {
+            "node": "Plan Active Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Active Updates": {
+      "main": [
+        [
+          {
+            "node": "Anything to Write?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to Write?": {
+      "main": [
+        [
+          {
+            "node": "Split Updates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Updates": {
+      "main": [
+        [
+          {
+            "node": "Update Capacity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Capacity": {
+      "main": [
+        [
+          {
+            "node": "Log Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
