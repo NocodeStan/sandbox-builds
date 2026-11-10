@@ -20,11 +20,17 @@ const threeBranches = (extra = []) => [
   page([member(LES, 'LES Unlimited Membership', 'LOCKED'), member(LES, 'LES Unlimited Membership')]),
 ];
 
-test('counts ACTIVE only (Jack, 10 Nov): paused, locked and pay-as-you-go members are not counted', () => {
+test('counts everyone holding a membership (Jack, 11 Nov): active, paused, locked and future count; pay-as-you-go does not', () => {
   const c = count(threeBranches());
+  assert.equal(c.counts['unlimited membership'].n, 2, 'active + paused');
+  assert.equal(c.counts['les unlimited membership'].n, 2, 'active + locked');
+  assert.equal(c.members, 8);
+});
+
+test('countStatuses can be narrowed back to ACTIVE only in Config', () => {
+  const c = count(threeBranches(), cfg({ countStatuses: ['ACTIVE'] }));
   assert.equal(c.counts['unlimited membership'].n, 1);
   assert.equal(c.counts['les unlimited membership'].n, 1);
-  assert.equal(c.members, 8);
 });
 
 test('a member listed by two branches is counted once', () => {
@@ -42,7 +48,7 @@ test('stops without changing anything on a Glofox error, a missing branch, or an
 });
 
 test('each Capacity row adds up its Glofox Memberships names; writes Active Members only when it changed, stamps every mapped row', () => {
-  const c = count(threeBranches());
+  const c = count(threeBranches(), cfg({ countStatuses: ['ACTIVE'] }));
   const wb = capacity({ Queue: 'Williamsburg · Unlimited', 'Active Members': 1, 'Glofox Memberships': 'Unlimited Membership\nUnlimited Membership - Founding Members' });
   const les = { ...capacity({ Queue: 'LES · Unlimited', Location: 'LES', 'Active Members': 1, 'Glofox Memberships': 'LES Unlimited Membership' }), id: 'recCAP0000000002' };
   const unmapped = { ...capacity({ Queue: 'Akari Yu · Unlimited', Location: 'Akari Yu', 'Active Members': 0 }), id: 'recCAP0000000003' };
@@ -56,7 +62,7 @@ test('each Capacity row adds up its Glofox Memberships names; writes Active Memb
 });
 
 test('a count that halves overnight is held back and flagged; a mapped name Glofox does not know is flagged', () => {
-  const c = count(threeBranches());
+  const c = count(threeBranches(), cfg({ countStatuses: ['ACTIVE'] }));
   const big = capacity({ Queue: 'Williamsburg · Unlimited', 'Active Members': 261, 'Glofox Memberships': 'Unlimited Membership\nUnlimted Membership' });
   const p = plan(c, [big]);
   assert.equal(p.chunks.length, 0, 'nothing written');
