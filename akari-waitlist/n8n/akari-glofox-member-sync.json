@@ -77,8 +77,8 @@
     {
       "parameters": {
         "url": "={{ $('Config').first().json.cfg.glofoxApi }}/2.0/members",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpMultipleHeadersAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpMultipleHeadersAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [

@@ -444,8 +444,10 @@ export function buildGlofoxSync() {
     code('Branches', [440, 80], 'glofox-branches'),
     node('Glofox Members', 'n8n-nodes-base.httpRequest', 4.2, [660, 80], {
       url: `={{ ${CFG('glofoxApi')} }}/2.0/members`,
-      authentication: 'genericCredentialType',
-      genericAuthType: 'httpMultipleHeadersAuth',
+      // Multiple Headers Auth only works as a "predefined" credential: the Generic mode's list doesn't include it
+      // and silently sends no auth headers.
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'httpMultipleHeadersAuth',
       sendQuery: true,
       queryParameters: { parameters: [{ name: 'limit', value: '100' }, { name: 'page', value: '1' }] },
       sendHeaders: true,
