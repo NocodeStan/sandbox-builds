@@ -111,6 +111,9 @@ const tokenFormula = (src) =>
   `={{ '{Invite Token}="' + (String(($('Config').first().json.${src} || {}).t || '').replace(/[^A-Za-z0-9]/g, '') || 'NO_TOKEN') + '"' }}`;
 const TOKEN_REC = `(($('Find Entry by Token (commit)').first().json.records || [])[0] || { fields: {} }).fields`;
 const SIGNUP_REC = `($('Get Entry for Send Sign-up Link').first().json.fields || {})`;
+const VIEW_REC = `(($('Find Entry by Token (view)').first().json.records || [])[0] || { fields: {} }).fields`;
+const SENDNOW_REC = `($('Get Entry for Send Now').first().json.fields || {})`;
+const queueFormula = (rec) => `={{ 'AND({Location}="' + ${safe(`${rec}.Location`)} + '",{Membership}="' + ${safe(`${rec}.Membership`)} + '")' }}`;
 // Staff buttons in Airtable carry the record ID and the Send Now secret.
 const STAFF_KEY_OK = `!!$json.cfg.sendNowSecret && $json.cfg.sendNowSecret !== 'CHANGE-ME' && ($json.query || {}).k === $json.cfg.sendNowSecret && /^rec[A-Za-z0-9]{14}$/.test(($json.query || {}).id || '')`;
 const safe = (expr) => `String(${expr} || '').replace(/["\\\\]/g, '')`;
@@ -183,11 +186,16 @@ export function buildMain() {
     acknowledge('Acknowledge Duplicate', [X.l5, Y.intake + 140]),
     httpJson('Create Waitlist Entries', [X.l5, Y.intake - 40], 'POST', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
     httpJson('Log: Joined', [X.l5 + 240, Y.intake - 40], 'POST', `={{ ${CFG('urls.log')} }}`,
-      `={{ JSON.stringify({ typecast: true, records: ($json.records || []).map(r => ({ fields: { Summary: 'Joined · ' + r.fields.Email, Timestamp: new Date().toISOString(), Event: 'Joined', Email: r.fields.Email, Name: r.fields.Name, Location: r.fields.Location, Membership: r.fields.Membership, Source: 'Typeform', 'Entry ID': r.id } })) }) }}`,
+      `={{ JSON.stringify({ typecast: true, records: ($json.records || []).map(r => ({ fields: { Summary: 'Joined · ' + r.fields.Email, Timestamp: new Date().toISOString(), Event: 'Joined', Email: r.fields.Email, Name: r.fields.Name, Location: r.fields.Location, Membership: r.fields.Membership, Source: 'Typeform', 'Entry ID': r.id, Detail: ($('Parse Typeform').first().json.warnings || []).join(' ') } })) }) }}`,
       CREDS.airtable, AIRTABLE_PACE),
+    // New locations / memberships from the form get a Capacity row (switched off) the first time they're chosen.
+    airtableGet('Get Capacity (intake)', [X.l5 + 480, Y.intake - 40], 'capacity', '', { executeOnce: true }),
+    code('Build New Queues', [X.l5 + 720, Y.intake - 40], 'build-new-queues', { executeOnce: true }),
+    ifTrue('Any New Queues?', [X.l5 + 960, Y.intake - 40], '($json.records || []).length > 0'),
+    httpJson('Create Capacity Rows', [X.l5 + 1200, Y.intake - 120], 'POST', `={{ ${CFG('urls.capacity')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
 
     // Typeform only gets its 200 once rows are saved; any failure returns an error to Typeform (and fires the error alert).
-    acknowledge('Acknowledge Typeform', [X.l5 + 480, Y.intake - 40]),
+    acknowledge('Acknowledge Typeform', [X.l5 + 1440, Y.intake - 40]),
 
     // 2 · Engine
     airtableGet('Get Capacity', [X.l1, Y.hourly], 'capacity', '{Enabled}'),
@@ -197,7 +205,10 @@ export function buildMain() {
 
     // 3 · Candidate response
     airtableGet('Find Entry by Token (view)', [X.l1, Y.view], 'waitlist', tokenFormula('query'), { paginate: false, candidate: true }),
-    code('Render Confirm Page', [X.l2, Y.view], 'render-confirm-page'),
+    // Only "Tour first" needs the queue's settings (its Cal.com link), so other clicks cost no extra Airtable call.
+    ifTrue('Tour View?', [X.l2, Y.view], "($('Config').first().json.query || {}).a === 'tour'"),
+    airtableGet('Find Queue Settings (view)', [X.l3, Y.view - 80], 'capacity', queueFormula(VIEW_REC), { executeOnce: true, paginate: false, candidate: true }),
+    code('Render Confirm Page', [X.l4, Y.view], 'render-confirm-page', { executeOnce: true }),
     airtableGet('Find Entry by Token (commit)', [X.l1, Y.commit], 'waitlist', tokenFormula('body'), { paginate: false, candidate: true }),
     airtableGet('Find Entries by Email', [X.l2, Y.commit], 'waitlist',
       `={{ 'LOWER({Email})="' + ${safe(`${TOKEN_REC}.Email`)}.toLowerCase() + '"' }}`, { executeOnce: true, paginate: false, candidate: true }),
@@ -213,7 +224,8 @@ export function buildMain() {
       genericAuthType: 'httpHeaderAuth',
       options: { response: { response: { neverError: true } } },
     }, { credentials: CREDS.airtable, ...RETRY }),
-    code('Build Send Now', [X.l3, Y.sendnow - 40], 'build-send-now'),
+    airtableGet('Find Queue Settings (send now)', [X.l3, Y.sendnow - 40], 'capacity', queueFormula(SENDNOW_REC), { executeOnce: true, paginate: false, candidate: true }),
+    code('Build Send Now', [X.l4, Y.sendnow - 40], 'build-send-now'),
     code('Forbidden Page', [X.l2, Y.sendnow + 120], 'forbidden-page'),
 
     // 6 · Send Sign-up Link
@@ -321,19 +333,26 @@ export function buildMain() {
     'Build New Entries': { main: [to('Anything New?')] },
     'Anything New?': { main: [to('Create Waitlist Entries'), to('Acknowledge Duplicate')] },
     'Create Waitlist Entries': { main: [to('Log: Joined')] },
-    'Log: Joined': { main: [to('Acknowledge Typeform')] },
+    'Log: Joined': { main: [to('Get Capacity (intake)')] },
+    'Get Capacity (intake)': { main: [to('Build New Queues')] },
+    'Build New Queues': { main: [to('Any New Queues?')] },
+    'Any New Queues?': { main: [to('Create Capacity Rows'), to('Acknowledge Typeform')] },
+    'Create Capacity Rows': { main: [to('Acknowledge Typeform')] },
     'Get Capacity': { main: [to('Get Active Entries')] },
     'Get Active Entries': { main: [to('Get Recent Pause Alerts')] },
     'Get Recent Pause Alerts': { main: [to('Plan Engine Actions')] },
     'Plan Engine Actions': { main: [to('Action Queue')] },
-    'Find Entry by Token (view)': { main: [to('Render Confirm Page')] },
+    'Find Entry by Token (view)': { main: [to('Tour View?')] },
+    'Tour View?': { main: [to('Find Queue Settings (view)'), to('Render Confirm Page')] },
+    'Find Queue Settings (view)': { main: [to('Render Confirm Page')] },
     'Render Confirm Page': { main: [to('Respond with Page')] },
     'Find Entry by Token (commit)': { main: [to('Find Entries by Email')] },
     'Find Entries by Email': { main: [to('Find Queue Settings')] },
     'Find Queue Settings': { main: [to('Decide Response')] },
     'Decide Response': { main: [to('Respond with Page')] },
     'Send Now Authorised?': { main: [to('Get Entry for Send Now'), to('Forbidden Page')] },
-    'Get Entry for Send Now': { main: [to('Build Send Now')] },
+    'Get Entry for Send Now': { main: [to('Find Queue Settings (send now)')] },
+    'Find Queue Settings (send now)': { main: [to('Build Send Now')] },
     'Build Send Now': { main: [to('Respond with Page')] },
     'Forbidden Page': { main: [to('Respond with Page')] },
     'Send Sign-up Link Authorised?': { main: [to('Get Entry for Send Sign-up Link'), to('Forbidden Page')] },

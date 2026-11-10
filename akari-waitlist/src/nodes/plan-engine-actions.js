@@ -8,18 +8,22 @@ const localHour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hou
 const inSendWindow = localHour >= CFG.sendWindow.startHour && localHour < CFG.sendWindow.endHour;
 
 const entries = recordsOf('Get Active Entries').map(normEntry);
+const seenQueues = new Set();
 const queues = recordsOf('Get Capacity')
   .map((r) => ({
     location: r.fields['Location'],
     membership: r.fields['Membership'],
     min: Number(r.fields['Minimum Members'] || 0),
     active: Number(r.fields['Active Members'] || 0),
-    countedAt: toDate(r.fields['Active Updated At']) || new Date(0),
+    countedAt: countedAtOf(r.fields),
     newOnly: !!r.fields['Prioritise New Only'],
     enabled: !!r.fields['Enabled'],
     hasSignupUrl: !!r.fields['Signup URL'],
+    price: r.fields['Price'],
   }))
-  .filter((q) => q.enabled && q.location && q.membership);
+  .filter((q) => q.enabled && q.location && q.membership)
+  // Two Capacity rows for the same queue would invite twice; only the first one counts (the daily summary flags the copy).
+  .filter((q) => { const k = `${q.location}|${q.membership}`; if (seenQueues.has(k)) return false; seenQueues.add(k); return true; });
 
 const actions = [];
 
@@ -88,7 +92,7 @@ function lineFor(q, inQueue) {
 // no heads-ups, and one alert to the team per queue per day (de-duplicated against the Activity Log).
 const alertedPauses = new Set(recordsOf('Get Recent Pause Alerts').map((r) => `${r.fields.Location}|${r.fields.Membership}`));
 function pauseAlert(q, gap) {
-  const label = `${q.membership} queue at Akari ${q.location}`;
+  const label = `${q.membership} queue at ${place(q.location)}`;
   const paras = [
     `The ${label} worked out ${gap} open spots (Minimum Members ${q.min}, Active Members ${q.active}). That's more than ${CFG.pauseIfOpenSpotsOver}, which usually means a typo, so the system has paused this queue. Nobody has been invited or emailed from it.`,
     'If the numbers are wrong, correct them in the Capacity table and invites resume at the next hourly check.',
@@ -109,7 +113,7 @@ const primeGroups = new Map();
 
 for (const q of queues) {
   const inQueue = entries.filter((e) => e.location === q.location && e.membership === q.membership);
-  const pendingSignups = inQueue.filter((e) => e.status === 'Signed Up' && e.responseAt && e.responseAt > q.countedAt).length;
+  const pendingSignups = inQueue.filter((e) => isPendingSignup(e, q.countedAt)).length;
   const holds = inQueue.filter((e) => HOLD_STATUSES.includes(e.status)).length;
   const gap = q.min - q.active - pendingSignups - holds;
   const line = lineFor(q, inQueue);
@@ -145,7 +149,7 @@ for (const q of queues) {
         Status: 'Invited', 'Invite Token': TOKEN, 'Invited At': NOW.toISOString(),
         'Invite Expires At': expires.toISOString(), 'Invite Source': 'Auto', 'Response At': null,
       },
-      email: inviteEmail(e, TOKEN, expires),
+      email: inviteEmail({ ...e, price: q.price }, TOKEN, expires),
       log: logRow(e, 'Invited', { Source: 'Auto', Detail: `${e.status === 'Warm' ? 'Warm re-invite. ' : ''}Held until ${fmtTime(expires)}` }),
     });
     engaged.add(e.email);
@@ -164,11 +168,11 @@ for (const q of queues) {
 // Jack's "heads up" copy (template 3), with two buttons (5 Nov): "still interested" and "remove me".
 function primeEmail(list, token) {
   const e = list[0];
-  const what = list.map((x) => `the ${x.membership} membership at Akari ${x.location}`).join(' and ');
+  const what = list.map((x) => `the ${x.membership} membership at ${place(x.location)}`).join(' and ');
   const locations = [...new Set(list.map((x) => x.location))];
   const subject = list.length === 1
-    ? `You're Almost Up for ${article(e.membership)} ${e.membership} Membership at Akari ${e.location}`
-    : locations.length === 1 ? `You're Almost Up for a Membership at Akari ${locations[0]}` : "You're Almost Up for an Akari Membership";
+    ? `You're Almost Up for ${article(e.membership)} ${e.membership} Membership at ${place(e.location)}`
+    : locations.length === 1 ? `You're Almost Up for a Membership at ${place(locations[0])}` : "You're Almost Up for an Akari Membership";
   const paras = [
     `Thank you for your continued patience on the waitlist for ${what}. We wanted to give you a heads up that you're now close to the front of the line, and a spot could open up any day now.`,
     `When it does, we'll send you an email with all the details, and you'll have ${CFG.holdHours} hours to claim your spot.`,

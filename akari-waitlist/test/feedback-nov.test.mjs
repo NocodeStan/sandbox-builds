@@ -184,7 +184,7 @@ test('D3: the daily summary follows Jack\'s template: subject, preview, Needs at
   assert.match(html, /<td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td><td[^>]*>2<\/td><td[^>]*>1<\/td><td[^>]*>1<\/td>/, 'last-24h row in Jack\'s column order');
   assert.match(html, /Greenpoint<\/td><td[^>]*>1<\/td><td[^>]*>0<\/td><td[^>]*>0</);
   assert.match(html, /Williamsburg<\/td><td[^>]*>1<\/td><td[^>]*>2<\/td><td[^>]*>2</);
-  assert.match(html, /Lower East Side<\/td>/);
+  assert.ok(html.indexOf('Williamsburg</td>') < html.indexOf('Greenpoint</td>'), 'locations follow the Capacity table, then any only on the waitlist');
   assert.match(html, /can be found <a href="https:\/\/airtable\.com\/appTEST123"[^>]*>here<\/a>/);
   assert.match(html, /More detail[\s\S]*Queues now/);
 });

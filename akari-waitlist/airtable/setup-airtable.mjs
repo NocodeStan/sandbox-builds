@@ -20,8 +20,10 @@ if (!TOKEN || (!BASE && !WORKSPACE)) {
   process.exit(1);
 }
 
-const LOCATIONS = ['Williamsburg', 'Greenpoint', 'Lower East Side'];
-const MEMBERSHIPS = ['Unlimited', 'Daytime', '4-Visit', 'Summer Pass'];
+// Starting dropdown options, named as the consolidated Typeform names them. New ones the team adds
+// to the form are created automatically (the workflow writes with typecast).
+const LOCATIONS = ['All-Access', 'Williamsburg', 'Greenpoint', 'LES', 'Akari Yu'];
+const MEMBERSHIPS = ['Unlimited', 'Daytime', 'Limited 4-Visit/Month', 'Limited 3-Visit/Month', 'Limited 5-Visit/Month'];
 const STATUSES = ['Waiting', 'Primed', 'Invited', 'Tour Requested', 'Warm', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'No Reply', 'Removed'];
 const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released', 'Still Interested', 'Queue Paused'];
 
@@ -55,6 +57,8 @@ const TABLES = [
       ['Queue', text], ['Location', select(LOCATIONS)], ['Membership', select(MEMBERSHIPS)],
       ['Minimum Members', integer], ['Active Members', integer],
       ['Prioritise New Only', checkbox], ['Enabled', checkbox], ['Signup URL', { type: 'url' }],
+      ['Price', { type: 'currency', options: { precision: 0, symbol: '$' } }], ['Tour Booking URL', { type: 'url' }],
+      ['Active Counted At', dateTime],
     ],
   },
   {
@@ -140,16 +144,9 @@ if (!waitTable.fields.some((f) => f.name === 'Priority Score')) {
   }
 }
 
-if (createdCapacity) {
-  const rows = LOCATIONS.flatMap((Location) => MEMBERSHIPS.map((Membership) => ({
-    fields: { Queue: `${Location} · ${Membership}`, Location, Membership, 'Minimum Members': 0, 'Active Members': 0, Enabled: false },
-  })));
-  for (let i = 0; i < rows.length; i += 10) {
-    await api('POST', `${BASE}/Capacity`, { records: rows.slice(i, i + 10) });
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  console.log(`✓ seeded ${rows.length} Capacity rows (all Enabled = off)`);
-}
+// Capacity rows are not seeded: each queue's row is created the first time someone picks it on the
+// form (switched off, Minimum and Active at 0). Staff fill in the numbers and tick Enabled.
+if (createdCapacity) console.log('• Capacity is empty: rows appear as people pick each location + membership on the form');
 
 console.log(`\nBase ID for the n8n Config node: ${BASE}`);
 console.log('Next (by hand, BUILD-GUIDE.md §4.2): add the "Send Now" and "Send Sign-up Link" buttons to Waitlist, and the "Line" view.');

@@ -22,8 +22,7 @@ const heading = (t) => `<p style="margin:16px 0 0"><strong>${esc(t)}</strong></p
 const attention = [];
 const queues = caps.filter((c) => c.Location && c.Membership).map((c) => {
   const inQ = live.filter((e) => e.location === c.Location && e.membership === c.Membership);
-  const countedAt = toDate(c['Active Updated At']) || new Date(0);
-  const pending = inQ.filter((e) => e.status === 'Signed Up' && e.responseAt && e.responseAt > countedAt).length;
+  const pending = inQ.filter((e) => isPendingSignup(e, countedAtOf(c))).length;
   const holds = inQ.filter((e) => HOLD_STATUSES.includes(e.status)).length;
   const waiting = inQ.filter((e) => ['Waiting', 'Primed'].includes(e.status)).length;
   const warm = inQ.filter((e) => e.status === 'Warm').length;
@@ -34,6 +33,20 @@ const queues = caps.filter((c) => c.Location && c.Membership).map((c) => {
   else if (c.Enabled && gap > 0 && waiting + warm === 0) attention.push(`${label}: ${gap} open spot(s) but nobody left on the waitlist.`);
   return { c, label, location: c.Location, enabled: !!c.Enabled, pending, holds, waiting, warm, open: c.Enabled ? Math.max(gap, 0) : 0, gap };
 });
+
+// ── Queues the form has created that aren't set up, people waiting with no Capacity row, copies ──
+const capKey = (c) => `${c.Location}|${c.Membership}`;
+const capCount = {};
+for (const c of caps.filter((x) => x.Location && x.Membership)) capCount[capKey(c)] = (capCount[capKey(c)] || 0) + 1;
+for (const [k, n] of Object.entries(capCount)) if (n > 1) attention.push(`${k.replace('|', ' · ')}: ${n} Capacity rows for the same queue. Only the first is used; delete the copy.`);
+const notSetUp = caps.filter((c) => c.Location && c.Membership && !c.Enabled && !Number(c['Minimum Members'] || 0) && !c['Signup URL']);
+for (const c of notSetUp) {
+  const n = live.filter((e) => e.location === c.Location && e.membership === c.Membership).length;
+  if (n) attention.push(`${c.Location} · ${c.Membership}: new from the form, ${n} on the waitlist. To start inviting, set Minimum Members, Active Members and Signup URL on its Capacity row, then tick Enabled.`);
+}
+const noRow = [...new Set(live.map((e) => `${e.location}|${e.membership}`))].filter((k) => !capCount[k] && !k.startsWith('|') && !k.endsWith('|'));
+for (const k of noRow) attention.push(`${k.replace('|', ' · ')}: ${live.filter((e) => `${e.location}|${e.membership}` === k).length} on the waitlist but no Capacity row, so nobody is invited. Add a row with this exact Location and Membership.`);
+for (const f of today.filter((x) => x.Event === 'Joined' && x.Detail)) attention.push(`Form submission from ${f.Email}: ${f.Detail}`);
 
 // ── Needs attention (Jack's three lines, plus the 60-day "not ready yet" check-ins) ──
 const expiring = live.filter((e) => e.status === 'Invited' && e.expiresAt && e.expiresAt > NOW && e.expiresAt - NOW <= DAY);
@@ -59,8 +72,8 @@ const last24 = [
 ];
 
 // ── By location ─────────────────────────────────────────────────
-const LOC_ORDER = ['Greenpoint', 'Williamsburg', 'Lower East Side'];
-const locs = [...new Set([...LOC_ORDER, ...caps.map((c) => c.Location), ...live.map((e) => e.location)].filter(Boolean))];
+// Locations in the order of the Capacity table, then any that only appear on the waitlist.
+const locs = [...new Set([...caps.map((c) => c.Location), ...live.map((e) => e.location)].filter(Boolean))];
 const byLoc = locs.map((loc) => [
   loc,
   live.filter((e) => e.location === loc && ['Waiting', 'Primed', 'Warm'].includes(e.status)).length,

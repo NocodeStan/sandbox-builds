@@ -9,11 +9,19 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const toDate = (v) => (v ? new Date(v) : null);
 const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || 'there';
 const article = (word) => (/^[aeiou]/i.test(String(word || '')) ? 'an' : 'a');
+// "Akari Williamsburg", but "Akari Yu" stays "Akari Yu" (the location's own name already says Akari).
+const place = (loc) => (/^akari\b/i.test(String(loc || '').trim()) ? String(loc).trim() : `Akari ${String(loc || '').trim()}`);
 const recordsOf = (nodeName) => $(nodeName).all().flatMap((i) => i.json.records || []);
 const fmtTime = (d) =>
   new Date(d).toLocaleString('en-US', {
     timeZone: CFG.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
   });
+
+// When Active Members was last counted: a staff edit (Active Updated At) or the daily Glofox sync
+// (Active Counted At), whichever is later. A sign-up after that count still holds a spot ("pending").
+const countedAtOf = (f = {}) => [toDate(f['Active Updated At']), toDate(f['Active Counted At'])]
+  .filter(Boolean).reduce((a, b) => (b > a ? b : a), new Date(0));
+const isPendingSignup = (e, countedAt) => e.status === 'Signed Up' && !!e.responseAt && e.responseAt > countedAt;
 
 // Real tokens come from the "Generate Tokens" (Crypto) node in the executor; Code nodes can't
 // reliably reach secure randomness, so they emit this placeholder instead.
@@ -46,10 +54,11 @@ function normEntry(r) {
   };
 }
 
-// Cal.com booking page for this person's location (blank if none is set), pre-filled with their name
+// Cal.com booking page for this person's queue (blank if none is set), pre-filled with their name
 // and email, and tagged with their row ID so the booking notification can be matched back to them.
-function tourBookingUrl(e) {
-  const base = String((CFG.tourBookingUrlByLocation || {})[e.location] || '').trim();
+// The queue's Capacity row (Tour Booking URL) wins; Config's tourBookingUrlByLocation is the fallback.
+function tourBookingUrl(e, settings) {
+  const base = String((settings && settings.fields && settings.fields['Tour Booking URL']) || (CFG.tourBookingUrlByLocation || {})[e.location] || '').trim();
   if (!base) return '';
   const params = [['name', e.name], ['email', e.email], ['metadata[entry]', e.id]]
     .filter(([, v]) => v)

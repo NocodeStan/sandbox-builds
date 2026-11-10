@@ -18,13 +18,14 @@ const cfg = {
 
   // Email content (confirmed with Jack, 9 Oct)
   membershipPageUrl: 'https://www.akarisauna.com/membership', // same for every location
-  priceByTier: { Unlimited: 220, Daytime: 165, '4-Visit': 140 }, // $/month; no "Summer Pass" price yet — update when it's live on the form
+  priceByTier: { Unlimited: 220, Daytime: 165, 'Limited 4-Visit/Month': 140 }, // $/month fallback. The Capacity row's Price wins (new rows take it from the form label)
 
-  // Tours: "Tour first" sends people to their location's Cal.com page. Blank = the old "when suits you?" box.
+  // Tours: "Tour first" sends people to their location's Cal.com page. The Capacity row's Tour Booking URL wins;
+  // this list is the fallback by location (names as on the form). Blank = the "when suits you?" box.
   tourBookingUrlByLocation: {
     Williamsburg: 'https://akari-sauna.cal.com/akari-williamsburg/akari-williamsburg-tours',
     Greenpoint: 'https://akari-sauna.cal.com/akari-greenpoint/akari-greenpoint-tours',
-    'Lower East Side': 'https://akari-sauna.cal.com/hello/akari-les-tours',
+    LES: 'https://akari-sauna.cal.com/hello/akari-les-tours',
   }, // from Jack, 28 Oct
   tourReleaseHours: 48, // a tour hold is released this long after the booked tour, unless a sign-up link was sent
   calWebhookSecret: 'CHANGE-ME', // long random string; goes on the end of the Cal.com webhook URL (?k=...)

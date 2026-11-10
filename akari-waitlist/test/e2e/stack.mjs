@@ -65,7 +65,7 @@ export async function startStack({ port = Number(process.env.N8N_TEST_PORT) || 5
     ["calWebhookSecret: 'CHANGE-ME'", `calWebhookSecret: '${CAL_SECRET}'`],
     ["Williamsburg: 'https://akari-sauna.cal.com/akari-williamsburg/akari-williamsburg-tours'", `Williamsburg: '${CAL_URL}'`],
     ["Greenpoint: 'https://akari-sauna.cal.com/akari-greenpoint/akari-greenpoint-tours'", "Greenpoint: ''"],
-    ["'Lower East Side': 'https://akari-sauna.cal.com/hello/akari-les-tours'", "'Lower East Side': ''"],
+    ["LES: 'https://akari-sauna.cal.com/hello/akari-les-tours'", "LES: ''"],
   ];
   for (const [from, to] of swaps) {
     assert.ok(config.parameters.jsCode.includes(from), `Config is missing ${from}`);

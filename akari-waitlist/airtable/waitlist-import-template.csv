@@ -1,0 +1,3 @@
+Name,Email,Phone,Location,Membership,Member Type,Joined At,Entry Source,Status,Timeout Count,Zip Code,Referral Source
+EXAMPLE Jane Doe,jane.doe@example.com,+17185550100,Williamsburg,Unlimited,New,2026-03-14 10:30,Admin,Waiting,0,11211,Instagram
+EXAMPLE Sam Lee,sam.lee@example.com,,Greenpoint,Limited 4-Visit/Month,Existing,2026-05-02 09:00,Admin,Waiting,0,,

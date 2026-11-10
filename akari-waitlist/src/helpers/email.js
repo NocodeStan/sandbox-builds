@@ -25,7 +25,8 @@ function respondLink(token, action) {
 
 function inviteEmail(e, token, expires) {
   const until = fmtTime(expires);
-  const price = CFG.priceByTier && CFG.priceByTier[e.membership];
+  // Price: the queue's Capacity row (Price), else Config's priceByTier; none = point to the membership page.
+  const price = e.price != null && e.price !== '' ? e.price : CFG.priceByTier && CFG.priceByTier[e.membership];
   const costLine = price
     ? `The cost for your membership will be $${price}/month, and additional membership details can be found on our membership page here ${CFG.membershipPageUrl}.`
     : `Additional membership details, including pricing, can be found on our membership page here ${CFG.membershipPageUrl}.`;
@@ -33,7 +34,7 @@ function inviteEmail(e, token, expires) {
   const costHtml = esc(costLine).replace(`here ${esc(CFG.membershipPageUrl)}`, pageLink);
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
-<p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at Akari ${esc(e.location)}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
+<p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at ${esc(place(e.location))}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
 <p>${costHtml} We'll hold it for you until <strong>${esc(until)}</strong>. After that it goes to the next person in line.</p>
 <p>Please let us know how you would like to proceed below:</p>
 ${btn(respondLink(token, 'yes'), 'Sign up', true)}
@@ -48,7 +49,7 @@ ${btn(respondLink(token, 'no'), 'No longer interested')}
 <p>Warmly,<br>Akari team</p>`, 'Your spot is available for a limited time');
   const text = `Hi ${firstName(e.name)},
 
-We really appreciate your patience during the waitlist process for the ${e.membership} membership at Akari ${e.location}. We are in the process of opening more memberships this month, and we would love to have you join us!
+We really appreciate your patience during the waitlist process for the ${e.membership} membership at ${place(e.location)}. We are in the process of opening more memberships this month, and we would love to have you join us!
 
 ${costLine} We'll hold it for you until ${until}. After that it goes to the next person in line.
 
@@ -66,7 +67,7 @@ We look forward to welcoming you soon!
 
 Warmly,
 Akari team`;
-  return { to: e.email, name: e.name, subject: `${e.membership} Membership Now Available at Akari ${e.location}`, html, text };
+  return { to: e.email, name: e.name, subject: `${e.membership} Membership Now Available at ${place(e.location)}`, html, text };
 }
 
 // Jack's confirmation copy (template 2): the private Glofox sign-up link. Unlimited signups are told
@@ -82,13 +83,13 @@ function confirmationEmail(e, signupUrl, { removedOthers = false, stillOn = fals
       : '';
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
-<p>Thank you for your interest in joining Akari! Here is your private sign up link for your ${esc(e.membership)} membership at Akari ${esc(e.location)}: ${linkHtml}</p>
+<p>Thank you for your interest in joining Akari! Here is your private sign up link for your ${esc(e.membership)} membership at ${esc(place(e.location))}: ${linkHtml}</p>
 ${overlap}
 <p>Please let us know if you have any issues signing up!</p>
 <p>Warmly,<br>Akari team</p>`, `Your ${e.membership} membership is ready for you`);
   const text = `Hi ${firstName(e.name)},
 
-Thank you for your interest in joining Akari! Here is your private sign up link for your ${e.membership} membership at Akari ${e.location}: ${linkText}
+Thank you for your interest in joining Akari! Here is your private sign up link for your ${e.membership} membership at ${place(e.location)}: ${linkText}
 
 ${removedOthers
     ? 'Once you sign up for your Unlimited membership, we\'ll automatically remove you from any other Akari waitlists you\'ve joined.'
@@ -98,7 +99,7 @@ Please let us know if you have any issues signing up!
 
 Warmly,
 Akari team`;
-  return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for Akari ${e.location}`, html, text };
+  return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for ${place(e.location)}`, html, text };
 }
 
 // Test mode (testRecipient set) redirects every email to that one inbox, except to people on

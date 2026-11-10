@@ -18,7 +18,13 @@ if (!rec || token.length < 16 || rec.fields['Invite Token'] !== token) {
 
 const e = normEntry(rec);
 const q = `${e.membership} membership at ${e.location}`;
-const calUrl = tourBookingUrl(e);
+// Looked up only for "Tour first" (the Tour View? IF); otherwise Config's tour links are the fallback.
+let viewSettings = null;
+try {
+  const n = $('Find Queue Settings (view)');
+  if (n.isExecuted !== false) viewSettings = n.all().flatMap((i) => i.json.records || [])[0] || null;
+} catch (err) { viewSettings = null; }
+const calUrl = tourBookingUrl(e, viewSettings);
 const COPY = {
   yes: { title: 'Claim your spot', lead: `Confirm you'd like the <strong>${esc(q)}</strong>. We'll take you straight to signup and payment.`, button: 'Yes — continue to signup' },
   tour: calUrl

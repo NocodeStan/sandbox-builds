@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildMain } from '../../build/build-workflow.mjs';
 import { sleep, startStack } from '../e2e/stack.mjs';
-import { typeformPayload } from '../fixtures.mjs';
+import { newFormPayload, typeformPayload } from '../fixtures.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LABEL = process.env.UAT_LABEL || new Date().toISOString().replace(/[:.]/g, '-');
@@ -29,8 +29,7 @@ const at = (n) => `stan+${n}@optimizewise.org`;
 const SELECTS = {
   Waitlist: {
     Status: ['Waiting', 'Primed', 'Invited', 'Tour Requested', 'Warm', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'No Reply', 'Removed'],
-    Location: ['Williamsburg', 'Greenpoint', 'Lower East Side'],
-    Membership: ['Unlimited', 'Daytime', '4-Visit', 'Summer Pass'],
+    // Location and Membership are open by design (they come from the form's labels), so not checked here.
     'Member Type': ['New', 'Existing'],
     'Entry Source': ['Typeform', 'Admin'],
     'Invite Source': ['Auto', 'Send Now'],
@@ -169,9 +168,9 @@ mock.seed('Capacity', [
   cap('Williamsburg · Daytime', 'Williamsburg', 'Daytime', 20, 20, { 'Signup URL': SIGNUP('wb-day') }),
   cap('Greenpoint · Unlimited', 'Greenpoint', 'Unlimited', 30, 30, { 'Signup URL': SIGNUP('gp-unl'), 'Prioritise New Only': true }),
   cap('Greenpoint · 4-Visit', 'Greenpoint', '4-Visit', 10, 9), // Signup URL forgotten
-  cap('Lower East Side · Unlimited', 'Lower East Side', 'Unlimited', 50, 0, { Enabled: false }), // not open yet
+  cap('LES · Unlimited', 'LES', 'Unlimited', 50, 0, { Enabled: false }), // not open yet
   cap('Greenpoint · Summer Pass', 'Greenpoint', 'Summer Pass', 5, 4, { 'Signup URL': SIGNUP('gp-sp') }),
-  cap('Williamsburg · 4-Visit', 'Williamsburg', '4-Visit', 20, 10, { 'Signup URL': SIGNUP('wb-4v') }), // 10 open spots
+  cap('Williamsburg · 4-Visit', 'Williamsburg', '4-Visit', 20, 10, { 'Signup URL': SIGNUP('wb-4v'), Price: 140 }), // 10 open spots; price set on the row
   cap('Greenpoint · Daytime', 'Greenpoint', 'Daytime', 500, 10, { 'Signup URL': SIGNUP('gp-day') }), // typo: meant 50 → 490 "open spots"
 ]);
 const person = (name, n, fields) => ({ Name: name, Email: at(n), Phone: '+17185550111', Location: 'Williamsburg', Membership: 'Unlimited', 'Member Type': 'New', 'Entry Source': 'Typeform', Status: 'Waiting', 'Timeout Count': 0, ...fields });
@@ -202,17 +201,17 @@ try {
   expect('name and phone are captured', () => eq([maya?.fields.Name, maya?.fields.Phone], ['Maya Chen', '+17185550100']));
   expect('a "Joined" entry is logged', () => eq(LOG().filter((l) => l.fields.Event === 'Joined' && l.fields.Email === at(1)).length, 1));
 
-  scenario('T2', '"All-Access (both locations)" choice', 'Leo, an existing member, picks the All-Access option and Unlimited.');
-  await typeform(typeformPayload({ email: at(2), first: 'Leo', last: 'Brooks', locations: ['All-Access (both locations)'], memberships: ['Unlimited'], existing: true, token: 'leo-1', submittedAt: daysAgo(5) }));
+  scenario('T2', 'Two locations at once', 'Leo, an existing member, ticks Williamsburg and Greenpoint and answers Unlimited.');
+  await typeform(typeformPayload({ email: at(2), first: 'Leo', last: 'Brooks', locations: ['Williamsburg - Akari Sauna - (202 Grand St.)', 'Greenpoint - Akari Sauna - (149 Franklin St.)'], memberships: ['Unlimited - $220/month'], existing: true, token: 'leo-1', submittedAt: daysAgo(5) }));
   expect('Leo is on both Williamsburg and Greenpoint Unlimited', () => eq(rowsOf(at(2)).map((x) => x.fields.Location).sort(), ['Greenpoint', 'Williamsburg']));
   expect('both rows are marked as an Existing member', () => eq(rowsOf(at(2)).map((x) => x.fields['Member Type']), ['Existing', 'Existing']));
 
-  scenario('T3', '"LES" shorthand for a location that is not open yet', 'Priya picks "LES" — the Lower East Side queue is switched off until opening.');
+  scenario('T3', 'A location that is not open yet', 'Priya picks "LES" — the LES queue is switched off until opening.');
   await typeform(typeformPayload({ email: at(3), first: 'Priya', last: 'Shah', locations: ['LES'], memberships: ['Unlimited'], token: 'priya-1', submittedAt: daysAgo(3) }));
-  expect('Priya is on the Lower East Side Unlimited list', () => eq(statusOf(at(3), 'Lower East Side', 'Unlimited'), 'Waiting'));
+  expect('Priya is on the LES Unlimited list (named as on the form)', () => eq(statusOf(at(3), 'LES', 'Unlimited'), 'Waiting'));
 
-  scenario('T4', 'Messy email + descriptive choice labels', 'Sam types their email with capitals and spaces; the form labels read "Daytime (weekdays before 4pm)" and "4-Visit Pack".');
-  await typeform(typeformPayload({ email: '  STAN+4@OptimizeWise.org ', first: 'Sam', last: "O'Connor", locations: ['Greenpoint'], memberships: ['Daytime (weekdays before 4pm)', '4-Visit Pack'], token: 'sam-1', submittedAt: daysAgo(4) }));
+  scenario('T4', 'Messy email + descriptive choice labels', 'Sam types their email with capitals and spaces; the form labels read "Daytime (weekdays before 4pm)" and "4-Visit - $140/month".');
+  await typeform(typeformPayload({ email: '  STAN+4@OptimizeWise.org ', first: 'Sam', last: "O'Connor", locations: ['Greenpoint'], memberships: ['Daytime (weekdays before 4pm)', '4-Visit - $140/month'], token: 'sam-1', submittedAt: daysAgo(4) }));
   expect('email is trimmed and lower-cased', () => eq(rowsOf(at(4)).length, 2));
   expect('both memberships are recognised', () => eq(rowsOf(at(4)).map((x) => x.fields.Membership).sort(), ['4-Visit', 'Daytime']));
   expect('apostrophe in the surname survives', () => eq(rowsOf(at(4))[0]?.fields.Name, "Sam O'Connor"));
@@ -249,6 +248,15 @@ try {
   await typeform(jo);
   expect('Jo is recorded as an Existing member', () => eq(rowOf(at(7), 'Williamsburg', 'Unlimited')?.fields['Member Type'], 'Existing'));
 
+  scenario('T11', 'The consolidated form: All-Access and a location the team just added', 'Rae uses the new single form: All-Access Unlimited ($260) and Akari Yu "Limited 3-Visit/Month - $XXX/month". Neither queue exists in Airtable yet.');
+  const capsBefore = mock.table('Capacity').length;
+  r = await typeform(newFormPayload({ email: at(8), first: 'Rae', last: 'Kim', token: 'rae-1', submittedAt: daysAgo(2), picks: { 'All-Access': ['Unlimited - $260/month'], 'Akari Yu': ['Limited 3-Visit/Month - $XXX/month'] } }));
+  expect('Typeform gets a 200', () => eq(r.status, 200));
+  expect('Rae is on "All-Access · Unlimited" and "Akari Yu · Limited 3-Visit/Month" (one list each, not spread across locations)', () => eq(rowsOf(at(8)).map((x) => `${x.fields.Location} · ${x.fields.Membership}`).sort(), ['Akari Yu · Limited 3-Visit/Month', 'All-Access · Unlimited']));
+  const newCaps = mock.table('Capacity').slice(capsBefore).map((c) => c.fields);
+  expect('both queues get a Capacity row, switched off with Minimum and Active at 0', () => eq(newCaps.map((c) => [c.Queue, c.Enabled, c['Minimum Members'], c['Active Members']]), [['All-Access · Unlimited', false, 0, 0], ['Akari Yu · Limited 3-Visit/Month', false, 0, 0]]));
+  expect('the All-Access row takes $260 from the form label; "$XXX" leaves Akari Yu\'s price blank', () => eq(newCaps.map((c) => c.Price ?? null), [260, null]));
+
   // ═══ DAY 0 · 9AM: first engine run ═══════════════════════════
   scenario('E1', 'First hourly run fills open spots', 'Williamsburg Unlimited has 2 open spots, Summer Pass 1, Williamsburg 4-Visit has 10, Greenpoint Daytime has a mistyped minimum of 500 (meant 50), Greenpoint 4-Visit has no signup link, LES is switched off.');
   const e1 = await engine('Day 0 9am');
@@ -257,7 +265,8 @@ try {
   expect('Williamsburg Unlimited: Cleo (manual rank 1) and Ava (longest weighted wait) are invited', () => eq(invitedWBU, ['Ava Romero', 'Cleo Ortiz']));
   expect('Summer Pass: Noor is invited', () => eq(statusOf(at(5), 'Greenpoint', 'Summer Pass'), 'Invited'));
   expect('Greenpoint 4-Visit (no signup link): nobody invited', () => eq(invited1.filter((l) => l.Location === 'Greenpoint' && l.Membership === '4-Visit').length, 0));
-  expect('Lower East Side (switched off): nobody invited or nudged', () => eq(e1.logs.filter((l) => l.Location === 'Lower East Side').length, 0));
+  expect('LES (switched off): nobody invited or nudged', () => eq(e1.logs.filter((l) => l.Location === 'LES').length, 0));
+  expect('All-Access and Akari Yu (new, not set up yet): nobody invited or nudged', () => eq(e1.logs.filter((l) => ['All-Access', 'Akari Yu'].includes(l.Location)).length, 0));
   expect('Williamsburg 4-Visit: 10 open spots → the 10 longest-waiting (Guest01–Guest10) are invited', () => eq(invited1.filter((l) => l.Membership === '4-Visit').map((l) => l.Name).sort(), Array.from({ length: 10 }, (_, i) => `Guest${String(i + 1).padStart(2, '0')} Test`)));
   expect('Greenpoint Daytime (mistyped minimum, 490 open spots): paused — nobody invited or sent a heads-up', () => eq(e1.logs.filter((l) => l.Location === 'Greenpoint' && l.Membership === 'Daytime' && l.Event !== 'Queue Paused').length, 0));
   const pauseMail = e1.sent.filter((m) => /^Check Minimum Members: Greenpoint · Daytime is paused/.test(m.subject));
@@ -432,23 +441,23 @@ try {
 
   // ═══ DAY 0 · staff actions ═══════════════════════════════════
   scenario('S1', 'Send Now with a bad key', 'Someone edits the Airtable button URL and the key is wrong.');
-  const priya = rowOf(at(3), 'Lower East Side', 'Unlimited');
+  const priya = rowOf(at(3), 'LES', 'Unlimited');
   r = await sendNow(priya.id, 'wrong-key');
   expect('refused (403) and nothing sent', () => eq([r.status, inbox(at(3)).length], [403, 0]));
 
   scenario('S2', 'Jack uses Send Now for an LES pre-opening member', 'LES is switched off, but Jack wants to invite Priya now. He clicks the button twice.');
   r = await sendNow(priya.id);
   expect('page: "Invite sent", with the hold deadline', () => has(r.page, /Invite sent[\s\S]*held until/));
-  expect('Priya → Invited (source: Send Now)', () => eq([statusOf(at(3), 'Lower East Side', 'Unlimited'), rowOf(at(3), 'Lower East Side', 'Unlimited').fields['Invite Source']], ['Invited', 'Send Now']));
+  expect('Priya → Invited (source: Send Now)', () => eq([statusOf(at(3), 'LES', 'Unlimited'), rowOf(at(3), 'LES', 'Unlimited').fields['Invite Source']], ['Invited', 'Send Now']));
   const r2b = await sendNow(priya.id);
   expect('second click within 2 minutes is ignored ("Already sent")', () => has(r2b.page, /Already sent/));
   expect('Priya received exactly one invite', () => eq(inbox(at(3)).filter(isInvite).length, 1));
-  expect('invite subject names the location: "…at Akari Lower East Side"', () => eq(inbox(at(3)).find(isInvite)?.subject, 'Unlimited Membership Now Available at Akari Lower East Side'));
+  expect('invite subject names the location: "…at Akari LES"', () => eq(inbox(at(3)).find(isInvite)?.subject, 'Unlimited Membership Now Available at Akari LES'));
 
   scenario('S3', 'Priya signs up but LES has no signup link yet', 'Priya clicks "Sign up"; the LES Capacity row has no Signup URL.');
   r = await confirm(inbox(at(3)).find(isInvite), 'yes');
   expect('Priya is told her spot is confirmed and the link will follow', () => has(r.page, /confirmed[\s\S]*signup link shortly/));
-  expect('status → Signed Up', () => eq(statusOf(at(3), 'Lower East Side', 'Unlimited'), 'Signed Up'));
+  expect('status → Signed Up', () => eq(statusOf(at(3), 'LES', 'Unlimited'), 'Signed Up'));
   expect('the log flags "SIGNUP URL MISSING" for staff', () => ({ ok: LOG().some((l) => l.fields.Email === at(3) && /SIGNUP URL MISSING/.test(l.fields.Detail || '')), detail: 'no flagged log row' }));
 
   // ═══ DAY 0 · evening report ═══════════════════════════════════
@@ -475,7 +484,8 @@ try {
   });
   expect('Needs attention lists the four counts', () => has(htmlOf(rep), /Invites expiring in the next 24 hours[\s\S]*Tour requests not yet booked[\s\S]*Open spots with no invite sent[\s\S]*due a check-in/));
   expect('Last 24 hours has Jack\'s six columns', () => has(htmlOf(rep), /New sign-ups[\s\S]*Invites sent[\s\S]*Accepted[\s\S]*Passed[\s\S]*Expired[\s\S]*Tour requests/));
-  expect('By location lists Greenpoint, Williamsburg, Lower East Side', () => has(htmlOf(rep), /By location[\s\S]*Greenpoint[\s\S]*Williamsburg[\s\S]*Lower East Side/));
+  expect('By location follows the Capacity table: Williamsburg, Greenpoint, LES, then the new ones', () => has(htmlOf(rep), /By location[\s\S]*Williamsburg[\s\S]*Greenpoint[\s\S]*LES[\s\S]*All-Access[\s\S]*Akari Yu/));
+  expect('the new queues are flagged for set-up under "Details to check"', () => has(htmlOf(rep), /All-Access · Unlimited: new from the form, 1 on the waitlist[\s\S]*Akari Yu · Limited 3-Visit\/Month: new from the form, 1 on the waitlist/));
   expect('the paused queue is flagged under "Details to check"', () => has(htmlOf(rep), /Greenpoint · Daytime: paused — 490 open spots/));
 
   // ═══ DAY 1 ═══════════════════════════════════════════════════
@@ -600,7 +610,7 @@ try {
   const alerts = inbox(TEAM).filter((m) => m.subject.startsWith('[Waitlist automation]'));
   expect('the only error alerts all week: the deliberately broken form, plus "temporary rate limit" notices', () => eq(alerts.filter((m) => !/missing email, location, membership/.test(m.subject) && !/temporary rate limit/.test(textOf(m))).map((m) => m.subject), []));
   expect('everyone marked Invited actually received an invite email with their current link', () => eq(W().filter((x) => x.fields.Status === 'Invited' && !inbox(x.fields.Email).some((m) => isInvite(m) && tokenIn(m, 'yes') === x.fields['Invite Token'])).map((x) => x.fields.Name), []));
-  expect('everyone marked Signed Up who has a signup link was emailed it', () => eq(W().filter((x) => x.fields.Status === 'Signed Up' && x.fields.Location !== 'Lower East Side' && !inbox(x.fields.Email).some(isConfirmation)).map((x) => x.fields.Name), []));
+  expect('everyone marked Signed Up who has a signup link was emailed it', () => eq(W().filter((x) => x.fields.Status === 'Signed Up' && x.fields.Location !== 'LES' && !inbox(x.fields.Email).some(isConfirmation)).map((x) => x.fields.Name), []));
   expect('no rejected Airtable/SendGrid calls (bad formulas, >10-row batches, bad payloads)', () => eq(mock.state.errors, []));
   expect('no Airtable rate-limit hits all week', () => ({ ok: mock.state.rateViolations === 0, detail: `${mock.state.rateViolations} request(s) got HTTP 429` }), 'risk');
 } catch (e) {

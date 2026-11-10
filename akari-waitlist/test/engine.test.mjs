@@ -42,13 +42,22 @@ test('gap of 2 → the two longest-waiting are invited with a 48h hold; the next
 
 test('open holds and unconfirmed signups count against the gap until staff recount', () => {
   const held = entry({ Status: 'Invited', 'Invite Expires At': hoursFromNow(5), 'Invite Token': 'x'.repeat(48) });
-  const signed = entry({ Status: 'Signed Up', 'Response At': hoursAgo(2) });
+  const signed = entry({ Status: 'Signed Up', 'Response At': hoursAgo(30) });
   const waiting = entry({});
-  const cap = capacity({ 'Minimum Members': 12, 'Active Members': 10, 'Active Updated At': hoursAgo(10) });
+  const cap = capacity({ 'Minimum Members': 12, 'Active Members': 10, 'Active Updated At': hoursAgo(40) });
   assert.equal(of(plan([cap], [held, signed, waiting]), 'Invited').length, 0);
 
   const recounted = capacity({ 'Minimum Members': 12, 'Active Members': 10, 'Active Updated At': hoursAgo(1) });
   assert.deepEqual(ids(of(plan([recounted], [held, signed, waiting]), 'Invited')), [waiting.id]);
+});
+
+test('the Glofox sync time (Active Counted At) counts as a recount, like a staff edit', () => {
+  const waiting = entry({});
+  const older = entry({ Status: 'Signed Up', 'Response At': hoursAgo(30) });
+  const stale = capacity({ 'Minimum Members': 11, 'Active Members': 10, 'Active Updated At': daysAgo(5) });
+  assert.equal(of(plan([stale], [older, waiting]), 'Invited').length, 0, 'not yet counted → still pending');
+  const synced = capacity({ 'Minimum Members': 11, 'Active Members': 10, 'Active Updated At': daysAgo(5), 'Active Counted At': hoursAgo(2) });
+  assert.deepEqual(ids(of(plan([synced], [older, waiting]), 'Invited')), [waiting.id]);
 });
 
 test('default: no reply to an invite → No Reply straight away (out of the line); the next person is invited', () => {

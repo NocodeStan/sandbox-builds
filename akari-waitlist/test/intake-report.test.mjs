@@ -1,35 +1,56 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { typeformPayload } from './fixtures.mjs';
+import { newFormPayload, typeformPayload } from './fixtures.mjs';
 import { baseConfig, capacity, daysAgo, entry, hoursAgo, records, runNode } from './harness.mjs';
 
 const parse = (body) => runNode('parse-typeform', { nodes: { Config: [{ json: { cfg: baseConfig(), body } }] } })[0].json;
 
-test('Typeform: one queue per location × membership, LES alias, normalised email', () => {
-  const p = parse(typeformPayload());
+const qs = (p) => p.queues.map((q) => `${q.location} · ${q.membership}`);
+
+test('Consolidated form: each membership question goes with the location in its title; names come from the labels', () => {
+  const p = parse(newFormPayload({ picks: { Williamsburg: ['Unlimited - $220/month', 'Limited 4-Visit/Month - $140/month'], LES: ['Daytime - $165/month'] } }));
   assert.equal(p.email, 'jane.doe@example.com');
   assert.equal(p.name, 'Jane Doe');
-  assert.equal(p.phone, '+17185550100');
+  assert.deepEqual(qs(p), ['Williamsburg · Unlimited', 'Williamsburg · Limited 4-Visit/Month', 'LES · Daytime']);
+  assert.deepEqual(p.queues.map((q) => q.price), [220, 140, 165]);
+  assert.deepEqual(p.warnings, []);
+});
+
+test('Consolidated form: All-Access and Akari Yu are their own lists; "$XXX" leaves the price blank', () => {
+  const p = parse(newFormPayload({ picks: { 'All-Access': ['Unlimited - $260/month'], 'Akari Yu': ['Limited 3-Visit/Month - $XXX/month'] } }));
+  assert.deepEqual(qs(p), ['All-Access · Unlimited', 'Akari Yu · Limited 3-Visit/Month']);
+  assert.deepEqual(p.queues.map((q) => q.price), [260, null]);
+});
+
+test('Consolidated form: a location and membership the team adds in Typeform flow through with no workflow change', () => {
+  const p = parse(newFormPayload({ extraLocations: { Bushwick: 'Bushwick - Akari Sauna - (12 Wyckoff Ave)' }, picks: { Bushwick: ['Evenings Only - $120/month'] } }));
+  assert.deepEqual(qs(p), ['Bushwick · Evenings Only']);
+  assert.equal(p.queues[0].price, 120);
+});
+
+test('Consolidated form: a ticked location with no membership answer is kept as a warning, not silently dropped', () => {
+  const p = parse(newFormPayload({ locations: ['Williamsburg', 'Greenpoint'], picks: { Williamsburg: ['Daytime - $165/month'] } }));
+  assert.deepEqual(qs(p), ['Williamsburg · Daytime']);
+  assert.deepEqual(p.warnings, ['Chose Greenpoint but no membership for it.']);
+});
+
+test('Consolidated form: free-text "Other" never becomes a location or membership', () => {
+  const body = newFormPayload({ picks: { Williamsburg: ['Unlimited - $220/month'] } });
+  body.form_response.answers.find((a) => a.field.ref === 'loc').choices.other = 'Somewhere else';
+  assert.deepEqual(qs(parse(body)), ['Williamsburg · Unlimited']);
+});
+
+test('Older form (one membership question for all locations) still works: every chosen location × membership', () => {
+  const p = parse(typeformPayload());
   assert.equal(p.memberType, 'New');
   assert.equal(p.joinedAt, '2026-09-20T15:00:00Z');
-  assert.deepEqual(p.queues, [
-    { location: 'Williamsburg', membership: 'Unlimited' },
-    { location: 'Williamsburg', membership: 'Daytime' },
-    { location: 'Lower East Side', membership: 'Unlimited' },
-    { location: 'Lower East Side', membership: 'Daytime' },
-  ]);
+  assert.deepEqual(qs(p), ['Williamsburg · Unlimited', 'Williamsburg · Daytime', 'LES · Unlimited', 'LES · Daytime']);
 });
 
 test('Typeform: label variants and existing-member question', () => {
-  const p = parse(typeformPayload({ memberships: ['4 Visit Pack', 'Summer Pass'], locations: ['Lower East Side (LES)'], existing: true }));
+  const p = parse(typeformPayload({ memberships: ['Daytime (weekdays before 4pm)', 'Summer Pass'], locations: ['Greenpoint - Akari Sauna - (149 Franklin St.)'], existing: true }));
   assert.equal(p.memberType, 'Existing');
-  assert.deepEqual(p.queues.map((q) => q.membership), ['4-Visit', 'Summer Pass']);
-  assert.deepEqual([...new Set(p.queues.map((q) => q.location))], ['Lower East Side']);
-});
-
-test('Typeform: "All-Access (both locations)" enrols in both real locations, not neither', () => {
-  const p = parse(typeformPayload({ locations: ['All-Access (both locations)'], memberships: ['Unlimited'] }));
-  assert.deepEqual(p.queues.map((q) => q.location).sort(), ['Greenpoint', 'Williamsburg']);
+  assert.deepEqual(qs(p), ['Greenpoint · Daytime', 'Greenpoint · Summer Pass']);
 });
 
 test('Typeform: Zip Code and "How did you hear about us?" are captured', () => {

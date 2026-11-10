@@ -174,7 +174,7 @@ test('confirmation page warns when the hold has lapsed; escapes data', () => {
 // ── Send Now ─────────────────────────────────────────────────
 function sendNow(rec, cfg = {}) {
   return runNode('build-send-now', {
-    nodes: { Config: [{ json: { cfg: baseConfig(cfg), query: { id: rec?.id } } }], 'Get Entry for Send Now': [{ json: rec || { error: { type: 'NOT_FOUND' } } }] },
+    nodes: { Config: [{ json: { cfg: baseConfig(cfg), query: { id: rec?.id } } }], 'Get Entry for Send Now': [{ json: rec || { error: { type: 'NOT_FOUND' } } }], 'Find Queue Settings (send now)': records([]) },
   })[0].json;
 }
 

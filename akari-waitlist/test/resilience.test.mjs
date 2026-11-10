@@ -57,7 +57,7 @@ test('opening a link during a lockout → 503 "refresh in a minute", not "link e
 
 test('Send Now during a lockout → 503, nothing sent (not "entry not found")', () => {
   const [{ json }] = runNode('build-send-now', {
-    nodes: { Config: cfgNode({ query: { id: 'recX' } }), 'Get Entry for Send Now': [{ json: { errors: [{ error: 'RATE_LIMIT_REACHED' }] } }] },
+    nodes: { Config: cfgNode({ query: { id: 'recX' } }), 'Get Entry for Send Now': [{ json: { errors: [{ error: 'RATE_LIMIT_REACHED' }] } }], 'Find Queue Settings (send now)': [{ json: { records: [] } }] },
   });
   assert.equal(json.status, 503);
   assert.deepEqual(json.actions, []);

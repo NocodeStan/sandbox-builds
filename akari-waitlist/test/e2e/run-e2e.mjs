@@ -2,7 +2,7 @@
 // and drives every lane through its webhooks.
 // Usage: NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n node test/e2e/run-e2e.mjs
 import assert from 'node:assert/strict';
-import { typeformPayload } from '../fixtures.mjs';
+import { newFormPayload } from '../fixtures.mjs';
 import { CAL_SECRET, CAL_URL, sleep, startStack, waitFor } from './stack.mjs';
 
 const SECRET = 'e2e-secret-123';
@@ -18,7 +18,7 @@ mock.seed('Capacity', [
   { Queue: 'Williamsburg · Unlimited', Location: 'Williamsburg', Membership: 'Unlimited', 'Minimum Members': 12, 'Active Members': 10, Enabled: true, 'Signup URL': SIGNUP('wb-unl') },
   { Queue: 'Williamsburg · Daytime', Location: 'Williamsburg', Membership: 'Daytime', 'Minimum Members': 5, 'Active Members': 5, Enabled: true, 'Signup URL': SIGNUP('wb-day') },
   { Queue: 'Greenpoint · Daytime', Location: 'Greenpoint', Membership: 'Daytime', 'Minimum Members': 0, 'Active Members': 0, Enabled: true, 'Signup URL': SIGNUP('gp-day') },
-  { Queue: 'Lower East Side · Unlimited', Location: 'Lower East Side', Membership: 'Unlimited', 'Minimum Members': 50, 'Active Members': 0, Enabled: false },
+  { Queue: 'LES · Unlimited', Location: 'LES', Membership: 'Unlimited', 'Minimum Members': 50, 'Active Members': 0, Enabled: false },
 ]);
 const person = (name, fields) => ({ Name: name, Email: `${name.toLowerCase()}@example.com`, Location: 'Williamsburg', Membership: 'Unlimited', 'Member Type': 'New', Status: 'Waiting', 'Timeout Count': 0, ...fields });
 const [alex, blair, casey, dana, alexDaytime] = mock.seed('Waitlist', [
@@ -55,21 +55,26 @@ try {
   await stack.ready();
   console.log('• n8n is up with the workflow published\n');
 
-  await step('Intake: Typeform submission → one row per location × membership, logged', async () => {
-    const r = await post('intake', typeformPayload({ locations: ['Williamsburg', 'LES'], memberships: ['Unlimited', 'Daytime'], submittedAt: ago(1) }));
+  await step('Intake (consolidated form): each membership question goes with its location; a new queue gets a Capacity row, switched off', async () => {
+    const r = await post('intake', newFormPayload({
+      submittedAt: ago(1),
+      picks: { Williamsburg: ['Unlimited - $220/month', 'Daytime - $165/month'], LES: ['Unlimited - $220/month'], 'Akari Yu': ['Limited 3-Visit/Month - $XXX/month'] },
+    }));
     assert.equal(r.status, 200, await r.text());
-    await waitFor(() => logs('Joined').length === 4, 'intake rows + logs');
+    await waitFor(() => logs('Joined').length === 4 && mock.table('Capacity').length === 5, 'intake rows + logs + new Capacity row');
     const jane = mock.table('Waitlist').filter((x) => x.fields.Email === 'jane.doe@example.com');
-    assert.equal(jane.length, 4);
+    assert.deepEqual(jane.map((x) => `${x.fields.Location} · ${x.fields.Membership}`).sort(), ['Akari Yu · Limited 3-Visit/Month', 'LES · Unlimited', 'Williamsburg · Daytime', 'Williamsburg · Unlimited']);
     assert.ok(jane.every((x) => x.fields.Status === 'Waiting' && x.fields.Name === 'Jane Doe' && x.fields['Entry Source'] === 'Typeform'));
-    assert.equal(logs('Joined').length, 4);
+    const yu = mock.table('Capacity').find((c) => c.fields.Location === 'Akari Yu');
+    assert.deepEqual([yu.fields.Queue, yu.fields.Enabled, yu.fields['Minimum Members'], yu.fields['Active Members']], ['Akari Yu · Limited 3-Visit/Month', false, 0, 0]);
   });
 
   await step('Intake: resubmitting the same form creates no duplicates', async () => {
-    const r = await post('intake', typeformPayload({ locations: ['Williamsburg'], memberships: ['Unlimited'], token: 'tok-again', submittedAt: ago(1) }));
+    const r = await post('intake', newFormPayload({ picks: { Williamsburg: ['Unlimited - $220/month'] }, token: 'tok-again', submittedAt: ago(1) }));
     assert.equal(r.status, 200, 'duplicates are acknowledged so Typeform does not retry');
     await sleep(1500);
     assert.equal(mock.table('Waitlist').filter((x) => x.fields.Email === 'jane.doe@example.com').length, 4);
+    assert.equal(mock.table('Capacity').length, 5, 'no duplicate Capacity row');
   });
 
   await step('Intake: an unprocessable submission returns an error to Typeform and emails an alert (never silently dropped)', async () => {
@@ -254,7 +259,7 @@ try {
     assert.match(m.content[0].value, /wb-unl/);
     await waitFor(() => logs('Signed Up').some((l) => l.fields.Source === 'Admin'), 'admin signup logged');
     await sleep(1500);
-    const [les] = mock.seed('Waitlist', [person('Lesley', { Location: 'Lower East Side', 'Joined At': ago(3) })]);
+    const [les] = mock.seed('Waitlist', [person('Lesley', { Location: 'LES', 'Joined At': ago(3) })]);
     const noUrl = await fetch(`${BASE}/send-signup?id=${les.id}&k=${SECRET}`);
     assert.equal(noUrl.status, 409);
   });

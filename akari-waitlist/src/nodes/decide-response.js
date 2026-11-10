@@ -57,7 +57,7 @@ if (e.status === 'Signed Up' && action !== 'leave') {
   return reply(200, 'You\'ve already claimed this spot', '<p>If you need your signup link again or want to change anything, just reply to our email.</p>');
 }
 
-const calUrl = tourBookingUrl(e);
+const calUrl = tourBookingUrl(e, settings);
 
 function tourAlert(late) {
   const signupDate = fmtTime(e.joinedAt);
@@ -74,7 +74,7 @@ function tourAlert(late) {
   const next = `If they decide to join${late ? '' : ' after the tour'}, press <strong>Send Sign-up Link</strong> on their row in Airtable. That emails their private sign-up link and marks them Signed Up.`;
   const html = emailLayout(`
 <p>Hi team,</p>
-<p><strong>${esc(e.name || e.email)}</strong> would like to tour Akari ${esc(e.location)} before committing to ${article(e.membership)} ${esc(e.membership)} membership. Their details are below:</p>
+<p><strong>${esc(e.name || e.email)}</strong> would like to tour ${esc(place(e.location))} before committing to ${article(e.membership)} ${esc(e.membership)} membership. Their details are below:</p>
 <p>Email: ${esc(e.email)}<br>Phone: ${esc(e.phone || '—')}<br>On the waitlist since: ${esc(signupDate)}<br>Spot held until: ${esc(holdUntil)}${note ? `<br>Preferred times: ${esc(note)}` : ''}</p>
 <p>${esc(booking)}</p>
 <p>${hold}</p>
@@ -83,7 +83,7 @@ function tourAlert(late) {
   const strip = (h) => h.replace(/<\/?strong>/g, '');
   const text = `Hi team,
 
-${e.name || e.email} would like to tour Akari ${e.location} before committing to ${article(e.membership)} ${e.membership} membership. Their details are below:
+${e.name || e.email} would like to tour ${place(e.location)} before committing to ${article(e.membership)} ${e.membership} membership. Their details are below:
 Email: ${e.email} | Phone: ${e.phone || '-'} | On the waitlist since: ${signupDate} | Spot held until: ${holdUntil}${note ? ` | Preferred times: ${note}` : ''}
 
 ${booking}
@@ -94,7 +94,7 @@ ${strip(next)}
 
 Thank you,
 Akari team`;
-  return { to: CFG.teamEmails, subject: `Tour Request: ${e.name || e.email} at Akari ${e.location}${late ? ' (late reply)' : ''}`, html, text };
+  return { to: CFG.teamEmails, subject: `Tour Request: ${e.name || e.email} at ${place(e.location)}${late ? ' (late reply)' : ''}`, html, text };
 }
 
 const toCalendar = (title, message, actions = acts) =>

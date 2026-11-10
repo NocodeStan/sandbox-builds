@@ -143,8 +143,8 @@ flowchart LR
      "https://YOUR-N8N-HOST/webhook/akari-waitlist/send-signup?id=" & RECORD_ID() & "&k=YOUR-SEND-NOW-SECRET"
      ```
    - **A "Line" view** on Waitlist (views can't be created through the API): filter *Status is any of Waiting, Primed, Warm*; group by *Location*, then *Membership*; sort by **Priority Score**, 9→1. That's the order the engine works through. The script creates Priority Score; if Airtable refuses, it prints the formula to paste.
-4. Fill in each Capacity row you'll use: `Minimum Members`, `Active Members`, `Signup URL`, then tick **Enabled** only when you're ready. Queues with no Signup URL never send invites.
-5. Migrate the current Excel waitlist: CSV-import into **Waitlist** with `Status = Waiting`, the original date in `Joined At`, `Entry Source = Admin`, and `Member Type = Existing` for upgrades and switches.
+4. Fill in each Capacity row you'll use: `Minimum Members` (the target), `Active Members` (current members with that membership at that location), `Signup URL`, optionally `Price` and `Tour Booking URL`, then tick **Enabled** only when you're ready. The engine's goal is to fill **Minimum − Active** spots from the waitlist (less sign-ups since the last count and open holds): Active 100, Minimum 120 → 20 invites over time, at most 10 per hourly run. Queues with no Signup URL never send invites. Rows appear by themselves as people pick each queue on the form; for the imported backing list, create a row per queue (Location and Membership spelled exactly as on the form).
+5. Import the backing list: fill `airtable/waitlist-import-template.csv` (delete the two EXAMPLE rows) and CSV-import it into **Waitlist**. `Status = Waiting`, the original date in `Joined At` (so they keep their place ahead of newer sign-ups), `Entry Source = Admin`, `Member Type = Existing` for upgrades and switches. **Location and Membership must be spelled exactly as the form produces them** (e.g. `LES`, `Limited 4-Visit/Month`), or those people form a separate queue. The daily summary flags any queue with people on it but no Capacity row.
 
 ### 4.3 n8n credentials
 Create two **Header Auth** credentials:
@@ -178,7 +178,8 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 | `sandboxMode` | Leave `true` until Stage 2 of testing |
 | `testRecipient` | Your own inbox for Stage 2, then `''` |
 | `allowedRecipients` | While `testRecipient` is set, these get their email for real: `'name@x.com'` (also matches `name+2@x.com`) or `'@domain.com'` |
-| `tourBookingUrlByLocation` | Each location's Cal.com booking page. Blank = the old "when suits you?" box for that location |
+| `tourBookingUrlByLocation` | Fallback Cal.com page per location (keys as on the form, e.g. `LES`). The Capacity row's **Tour Booking URL** wins. Blank = the "when suits you?" box |
+| `priceByTier` | Fallback price per membership name. The Capacity row's **Price** wins; neither = "pricing on the membership page" |
 | `tourReleaseHours` | How long after the booked tour the hold is released (48) |
 | `calWebhookSecret` | A long random string. It goes on the end of the Cal.com webhook URL (§4.7) |
 | `timeoutsBeforeNoReply` | `1` = a missed invite goes straight to No Reply (Jack, 5 Nov). `2` = one more chance via Warm first |
@@ -189,8 +190,22 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 4. Workflow **Settings** → *Error workflow* → **Akari Waitlist · Error Alert**. Check the timezone is America/New_York (it's already set in the JSON).
 5. **Publish** (2.x) / **Activate** (1.x). The email links point at production webhook URLs, so response flows only work on a published workflow.
 
-### 4.6 Typeform
-Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/akari-waitlist/intake` and switch it on. The parser finds fields by type and by matching choice labels, so question wording can change freely. The **choice labels** must still contain the location names (Williamsburg, Greenpoint, Lower East Side/LES) and membership names (Unlimited, Daytime, 4-Visit, Summer Pass) — a label meaning more than one location (e.g. "All-Access (both locations)") is matched as an alias and enrols the person in every location it covers; see `LOCATION_ALIASES` in Parse Typeform to add another. A yes/no question containing "existing … member" sets Member Type automatically. A short-text question containing "zip"/"postal" or "how … hear … about" is captured into `Zip Code` / `Referral Source`, logged but not otherwise used by the automation.
+### 4.6 Typeform (one consolidated form)
+Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/akari-waitlist/intake` and switch it on. Switch the webhook **off** on any old forms.
+
+The workflow holds **no list of locations or memberships**. It reads them from the form, so the team can add a location or a membership in Typeform without a workflow change. Three rules keep that working:
+
+| Rule | Example on the live form |
+|---|---|
+| **The location question's title contains the word "location".** A choice's name is the text before ` - ` or `(`. | "Williamsburg - Akari Sauna - (202 Grand St.)" → **Williamsburg** · "All-Access (Akari Sauna locations)" → **All-Access** · "Akari Yu (888 Lorimer St) (coming soon!)" → **Akari Yu** |
+| **Each membership question's title contains the word "membership" and the location's name** (as above). It belongs to that location. | "Which **Williamsburg** membership(s) are you interested in?" |
+| **A membership choice's name is the text before ` - ` or `(`.** A `$` amount in it becomes the price on a new Capacity row. | "Limited 4-Visit/Month - $140/month" → **Limited 4-Visit/Month**, $140 · "$XXX" → no price |
+
+The first time someone picks a location + membership that has no Capacity row, the workflow **creates the row, switched off**, with Minimum and Active at 0. The daily summary lists it under *Details to check* until staff set Minimum, Active and Signup URL and tick Enabled. Nothing is sent from it before then. **Renaming a choice label creates a new queue** (the name is the identity), so fix typos before people pick them, or rename the Waitlist and Capacity values in Airtable to match.
+
+All-Access is its own queue (its own Capacity row, price and Signup URL), not a shortcut for "both locations". A form with a single membership question that names no location still works: its answers apply to every location ticked. A ticked location with no membership answer, or membership questions the parser can't place, are saved as far as possible and listed in the daily summary.
+
+A yes/no question containing "existing … member" sets Member Type. A short-text question containing "zip"/"postal" or "how … hear … about" is captured into `Zip Code` / `Referral Source`. Free-text "Other" answers never create a location or membership.
 
 ---
 
@@ -221,12 +236,13 @@ Typeform → **Connect → Webhooks** → add `https://<your-n8n-host>/webhook/a
 ### Lane 1 · Intake
 | Node | Type | What it does |
 |---|---|---|
-| Parse Typeform | Code | Pulls out email (lower-cased), name, phone, member type and every location × membership combination. A submission with no email, location or membership **fails loudly** (error alert). |
+| Parse Typeform | Code | Pulls out email (lower-cased), name, phone, member type, and each location with the memberships from the question that names it (§4.6). Names and prices come from the form's labels; no list of locations or memberships lives in the workflow. A submission with no email, location or membership **fails loudly** (error alert); partial problems are logged and listed in the daily summary. |
 | Find Existing Entries | HTTP GET Airtable | This email's current rows. |
 | Build New Entries | Code | Skips queues they're already active on; batches new rows 10 at a time. |
 | Anything New? | IF | Duplicate submission → just acknowledge. |
 | Create Waitlist Entries | HTTP POST Airtable | Creates rows: `Status = Waiting`, `Joined At` = Typeform submit time. |
-| Log: Joined | HTTP POST Airtable | One Activity Log row per new entry. |
+| Log: Joined | HTTP POST Airtable | One Activity Log row per new entry (with any form warnings in Detail). |
+| Get Capacity (intake) → Build New Queues → Any New Queues? → Create Capacity Rows | HTTP GET / Code / IF / HTTP POST | A location + membership picked for the first time gets a Capacity row, switched off, Minimum and Active 0, Price from the label. |
 | Acknowledge Typeform / Acknowledge Duplicate | Respond to Webhook | 200 to Typeform, sent only after rows are saved. A failure returns an error, which is visible in Typeform's webhook delivery log, and fires the error alert. |
 
 ### Lane 2 · Engine
@@ -349,7 +365,7 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 ## 8. Airtable schema (manual build)
 **Waitlist** — Name (text, primary) · Email (email) · Phone (phone) · Zip Code (text) · Referral Source (text) · Location (single select) · Membership (single select) · Member Type (New / Existing) · Entry Source (Typeform / Admin) · Joined At (date-time) · Manual Rank (integer) · Status (single select — see §3) · Invite Token (text) · Invited At · Invite Expires At (date-time) · Invite Source (Auto / Send Now) · Timeout Count (integer) · Primed At · Response At (date-time) · Reason · Tour Notes (long text) · Tour At · Interest Confirmed At (date-time) · Notes (long text) · Priority Score (formula, see `airtable/setup-airtable.mjs`) · Send Now (button) · Send Sign-up Link (button).
 
-**Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL).
+**Capacity** — Queue (text, primary, e.g. "Williamsburg · Unlimited") · Location · Membership (single select; new options are added automatically) · Minimum Members · Active Members (integer) · Active Updated At (last modified time → Active Members) · Active Counted At (date-time, written by the Glofox sync) · Prioritise New Only · Enabled (checkbox) · Signup URL (URL) · Price (currency) · Tour Booking URL (URL).
 
 **Activity Log** — Summary (text, primary) · Timestamp (date-time) · Event (single select) · Email · Name · Location · Membership · Source (text) · Reason · Detail (long text) · Entry ID (text).
 
@@ -357,6 +373,7 @@ Date-time fields: time zone America/New_York.
 
 ## 9. Runbook for the Akari team
 - **After each recount in Glofox**, update `Active Members`. This also clears "pending signups" from the maths.
+- **New location or membership**: add it in Typeform following the three naming rules (§4.6). Its Capacity row appears, switched off, after the first person picks it; fill in Minimum, Active, Signup URL (and Price / Tour Booking URL), then tick Enabled.
 - **Tour Requested**: the candidate books through Cal.com and the time appears in **Tour At**. After the tour, press **Send Sign-up Link** if they want to join. If nothing is sent, the hold is released 48h after the tour and they move to Not Right Now (the daily summary lists them).
 - **Who's next?** Open the **Line** view: each queue is sorted by Priority Score, highest first.
 - **Not Right Now**: follow up by hand; press Send Now when they're ready. After 60 days they're listed in the daily summary under *due a check-in*.

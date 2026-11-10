@@ -8,6 +8,8 @@ const reply = (status, title, body, actions = []) => [{ json: { status, page: ht
 if (rec && Array.isArray(rec.errors)) return reply(503, 'Airtable is busy', '<p>Airtable is briefly limiting requests. Nothing was sent — wait a minute and press the button again.</p>');
 if (!rec || !rec.id || !rec.fields) return reply(404, 'Entry not found', '<p>That waitlist entry could not be found. It may have been deleted.</p>');
 const e = normEntry(rec);
+const settings = recordsOf('Find Queue Settings (send now)')[0];
+e.price = settings ? settings.fields['Price'] : null;
 if (!e.email) return reply(422, 'No email address', `<p>${esc(e.name || e.id)} has no email address, so nothing was sent.</p>`);
 if (e.status === 'Invited' && e.source === 'Send Now' && e.invitedAt && NOW - e.invitedAt < 2 * 60000) {
   return reply(200, 'Already sent', `<p>An invite went to ${esc(e.email)} less than two minutes ago, so this click was ignored.</p>`);
