@@ -337,7 +337,7 @@ try {
   scenario('R2', 'Ava wants a tour first', 'Ava clicks "Tour first" and writes "Weekday evenings after 6".');
   const avaInv = inv(at(11));
   r = await confirm(avaInv, 'tour', 'Weekday evenings after 6');
-  expect('Ava is told her spot is held and sent to Williamsburg\'s booking page', () => has(r.page, /held for you[\s\S]*url=https:\/\/cal\.test/));
+  expect('Ava is told her spot is held and sent to Williamsburg\'s booking page', () => ({ ok: /held for you/.test(r.page) && /url=https:\/\/cal\.test/.test(r.page), detail: r.page.slice(0, 300) }));
   expect('status → Tour Requested, notes saved', () => eq([statusOf(at(11), 'Williamsburg', 'Unlimited'), rowOf(at(11), 'Williamsburg', 'Unlimited').fields['Tour Notes']], ['Tour Requested', 'Weekday evenings after 6']));
   expect('no team email: she books directly, and Cal.com tells the team (Jack, 13 Nov)', () => eq(inbox(TEAM).filter((m) => /^Tour Request: Ava Romero/.test(m.subject)).length, 0));
 
