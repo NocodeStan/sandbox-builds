@@ -232,6 +232,16 @@ Keeps **Active Members** true to Glofox, once a day at 5:30am New York (before t
 
 What it does: pages through every member of each branch (about 45 requests, ~15 seconds), counts each person once, adds up each row's names, writes **Active Members** only where the number changed, and stamps **Active Counted At** on every mapped row (the engine treats that as a recount, so sign-ups before it stop counting as pending). Safety: an error page, a missing branch or an incomplete list stops the run with nothing changed (and the error alert fires); a count that falls by more than half (`maxDropShare`) is held back and flagged. It then marks existing members on the Waitlist (**Glofox Membership**, see 4.7a), writing only rows that change. Each run writes one **Active Synced** row to the Activity Log listing what changed, mapped names Glofox doesn't know, and Glofox memberships not counted in any queue. The daily summary flags a sync that hasn't run in a day, held-back counts and unknown names. Successful runs don't save execution data in n8n, so member details aren't kept there.
 
+### 4.9 Revenue verification and the leadership dashboard (13 Nov)
+"Signed Up" means the person pressed **Sign up** and was sent to Glofox; it doesn't prove they paid. The same daily sync closes that gap:
+
+- **Glofox Verified At**: set once, the first morning Glofox shows an invited person (matched by **email**) holding one of their queue's memberships (the Capacity row's **Glofox Memberships**, statuses in `countStatuses`) that started no earlier than the day before their invite. People never invited, and memberships that started before the invite, are not credited. A **Purchase Verified** row goes to the Activity Log. It is never cleared.
+- **Monthly Value**: what the person adds per month: the queue's Capacity **Price**, or for an existing member's upgrade the difference from the queue they already hold (All-Access Daytime $205 − Greenpoint Daytime $165 = $40). Fixed at verification (Glofox's monthly plan price when it has one).
+- **Glofox Check**: for Signed Up and Tour Requested rows, what Glofox shows: *no Glofox account under this email yet*, *Glofox account, no membership yet*, or the membership they hold. These are the follow-ups: sign-ups that never completed.
+- Formulas for the Interface: **Revenue Stage** (1 · Purchase verified … 9 · Waiting), **Verified MRR**, **Committed MRR** (signed up, not yet seen in Glofox), **Tour Pipeline MRR**, **Open Offer MRR**, **Verified Annual Value**, **Hours to Reply**; Capacity › **Open Spots**, **Fill Rate**.
+
+Limits: email is the only match key, so someone who buys under another email shows as *no Glofox account* and isn't credited (staff can see this in Glofox Check). The figures are monthly list prices, not collected cash; discounts and failed payments aren't visible through the member list.
+
 ---
 
 ## 5. Node-by-node reference

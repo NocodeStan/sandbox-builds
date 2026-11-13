@@ -100,7 +100,7 @@ test('existing members on the waitlist: "Glofox Membership" set for holders, cle
     { id: 'recC', fields: { Email: 'left@example.com', 'Glofox Membership': 'Daytime Membership' } },
     { id: 'recD', fields: { Email: 'payg@example.com' } },
   ];
-  const out = runNode('glofox-member-flags', { nodes: { Config: [{ json: { cfg: cfg() } }], 'Count Members': [{ json: c }], 'Get Waitlist': records(wl) } })[0].json;
+  const out = runNode('glofox-member-flags', { nodes: { Config: [{ json: { cfg: cfg() } }], 'Count Members': [{ json: c }], 'Get Waitlist': records(wl), 'Get Capacity': records([]) } })[0].json;
   assert.deepEqual(out.chunks.flatMap((x) => x.records), [
     { id: 'recA', fields: { 'Glofox Membership': 'Daytime Membership' } },
     { id: 'recC', fields: { 'Glofox Membership': null } },

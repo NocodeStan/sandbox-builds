@@ -25,7 +25,7 @@ if (!TOKEN || (!BASE && !WORKSPACE)) {
 const LOCATIONS = ['All-Access', 'Williamsburg', 'Greenpoint', 'LES', 'Akari Yu'];
 const MEMBERSHIPS = ['Unlimited', 'Daytime', 'Limited 4-Visit/Month', 'Limited 3-Visit/Month', 'Limited 5-Visit/Month'];
 const STATUSES = ['Waiting', 'Primed', 'Invited', 'Tour Requested', 'Warm', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'No Reply', 'Removed'];
-const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released', 'Still Interested', 'Queue Paused'];
+const EVENTS = ['Joined', 'Primed', 'Invited', 'Tour Requested', 'Signed Up', 'Not Right Now', 'No Longer Interested', 'Timed Out', 'Late Reply', 'Removed', 'Tour Booked', 'Tour Cancelled', 'Tour Released', 'Still Interested', 'Queue Paused', 'Active Synced', 'Purchase Verified'];
 
 const select = (names) => ({ type: 'singleSelect', options: { choices: names.map((name) => ({ name })) } });
 const dateTime = { type: 'dateTime', options: { timeZone: 'America/New_York', dateFormat: { name: 'iso' }, timeFormat: { name: '24hour' } } };
@@ -48,6 +48,8 @@ const TABLES = [
       ['Invite Source', select(['Auto', 'Send Now'])], ['Timeout Count', integer],
       ['Primed At', dateTime], ['Response At', dateTime],
       ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Interest Confirmed At', dateTime], ['Glofox Membership', text], ['Notes', long],
+      // Written by the daily Glofox sync for the revenue dashboard (BUILD-GUIDE 4.9).
+      ['Glofox Verified At', dateTime], ['Monthly Value', { type: 'currency', options: { precision: 0, symbol: '$' } }], ['Glofox Check', text],
     ],
   },
   {
@@ -141,6 +143,37 @@ if (!waitTable.fields.some((f) => f.name === 'Priority Score')) {
     console.log('✓ created Waitlist › Priority Score');
   } catch (err) {
     console.log(`! Airtable didn't accept the Priority Score formula field through the API (${err.message.slice(0, 120)}).\n  Add it by hand: Waitlist → + → Formula → name "Priority Score" → paste:\n${PRIORITY_FORMULA}\n`);
+  }
+}
+
+// Revenue dashboard formulas (BUILD-GUIDE 4.9): sums for the Interface's number tiles, one field per stage.
+const NOT_VERIFIED = 'NOT({Glofox Verified At})';
+const REVENUE_FORMULAS = [
+  ['Waitlist', 'Revenue Stage', `IF({Glofox Verified At}, "1 · Purchase verified",
+IF({Status} = "Signed Up", "2 · Signed up, purchase pending",
+IF(AND({Status} = "Tour Requested", {Tour At}), "3 · Tour booked",
+IF({Status} = "Tour Requested", "4 · Tour requested",
+IF({Status} = "Invited", "5 · Offer open",
+IF({Status} = "Warm", "6 · Offer lapsed, still keen",
+IF({Invited At}, "7 · Offer declined or expired",
+IF({Status} = "Primed", "8 · Heads-up sent",
+IF(OR({Status} = "Waiting", {Status} = ""), "9 · Waiting", "10 · Left the waitlist")))))))))`],
+  ['Waitlist', 'Verified MRR', 'IF({Glofox Verified At}, {Monthly Value}, 0)'],
+  ['Waitlist', 'Committed MRR', `IF(AND(${NOT_VERIFIED}, {Status} = "Signed Up"), {Monthly Value}, 0)`],
+  ['Waitlist', 'Tour Pipeline MRR', `IF(AND(${NOT_VERIFIED}, {Status} = "Tour Requested"), {Monthly Value}, 0)`],
+  ['Waitlist', 'Open Offer MRR', `IF(AND(${NOT_VERIFIED}, {Status} = "Invited"), {Monthly Value}, 0)`],
+  ['Waitlist', 'Verified Annual Value', '{Verified MRR} * 12'],
+  ['Waitlist', 'Hours to Reply', 'IF(AND({Invited At}, {Response At}, IS_AFTER({Response At}, {Invited At})), ROUND(DATETIME_DIFF({Response At}, {Invited At}, "minutes") / 60, 1))'],
+  ['Capacity', 'Fill Rate', 'IF({Minimum Members}, ROUND({Active Members} / {Minimum Members} * 100))'],
+];
+for (const [tableName, name, formula] of REVENUE_FORMULAS) {
+  const table = (await api('GET', `meta/bases/${BASE}/tables`)).tables.find((t) => t.name === tableName);
+  if (table.fields.some((f) => f.name === name)) continue;
+  try {
+    await api('POST', `meta/bases/${BASE}/tables/${table.id}/fields`, { name, type: 'formula', options: { formula } });
+    console.log(`✓ created ${tableName} › ${name}`);
+  } catch (err) {
+    console.log(`! Add by hand: ${tableName} → + → Formula → "${name}" → paste:\n${formula}\n`);
   }
 }
 

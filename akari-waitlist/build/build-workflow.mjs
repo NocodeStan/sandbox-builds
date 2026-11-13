@@ -478,6 +478,10 @@ export function buildGlofoxSync() {
     ifTrue('Any Flag Changes?', [2860, 80], '($json.chunks || []).length > 0'),
     code('Split Flag Updates', [3080, 0], 'glofox-split-flags', { executeOnce: true }),
     httpJson('Update Member Flags', [3300, 0], 'PATCH', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
+    // Purchases verified in Glofox today (revenue dashboard): one Activity Log row each.
+    ifTrue('Any New Purchases?', [2860, 260], "($('Plan Member Flags').first().json.logChunks || []).length > 0"),
+    code('Split Purchase Logs', [3080, 260], 'glofox-split-purchase-logs', { executeOnce: true }),
+    httpJson('Log Purchases', [3300, 260], 'POST', `={{ ${CFG('urls.log')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
   ];
   return {
     name: 'Akari Waitlist · Glofox Member Sync',
@@ -496,7 +500,9 @@ export function buildGlofoxSync() {
       'Update Capacity': { main: [to('Log Sync')] },
       'Log Sync': { main: [to('Get Waitlist')] },
       'Get Waitlist': { main: [to('Plan Member Flags')] },
-      'Plan Member Flags': { main: [to('Any Flag Changes?')] },
+      'Plan Member Flags': { main: [[...to('Any Flag Changes?'), ...to('Any New Purchases?')]] },
+      'Any New Purchases?': { main: [to('Split Purchase Logs'), []] },
+      'Split Purchase Logs': { main: [to('Log Purchases')] },
       'Any Flag Changes?': { main: [to('Split Flag Updates'), []] },
       'Split Flag Updates': { main: [to('Update Member Flags')] },
     },

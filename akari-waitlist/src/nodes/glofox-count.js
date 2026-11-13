@@ -9,6 +9,8 @@ const seen = new Set();
 const perBranch = {}; // branch id → { expected, got }
 const counts = {}; // lower-case membership name → { name, n }
 const holders = {}; // lower-case email → membership names held (same statuses), for the waitlist's existing-member flag
+const held = {}; // lower-case email → [{ id, name, status, start, price, monthly }], for verifying waitlist purchases
+const accounts = {}; // lower-case email → true for every Glofox account (members and pay-as-you-go)
 for (const p of pages) {
   if (!p || p.success === false || p.message || !Array.isArray(p.data)) {
     problems.push(String((p && (p.message || p.error)) || 'unreadable page').slice(0, 200));
@@ -21,6 +23,10 @@ for (const p of pages) {
     if (seen.has(m._id)) continue;
     seen.add(m._id);
     const ms = m.membership || {};
+    for (const raw of [m.email, m.account_email, m.contact_email]) {
+      const email = String(raw || '').trim().toLowerCase();
+      if (email) accounts[email] = true;
+    }
     if (!ms.membership_name || !statuses.has(String(ms.status || '').toUpperCase())) continue;
     const key = ms.membership_name.trim().toLowerCase();
     counts[key] = counts[key] || { name: ms.membership_name.trim(), n: 0 };
@@ -30,6 +36,19 @@ for (const p of pages) {
       if (!email) continue;
       holders[email] = holders[email] || [];
       if (!holders[email].includes(ms.membership_name.trim())) holders[email].push(ms.membership_name.trim());
+      held[email] = held[email] || [];
+      const id = ms.user_membership_id || ms._id || m._id;
+      if (!held[email].some((h) => h.id === id)) {
+        const start = Number(ms.start_date) || 0;
+        held[email].push({
+          id,
+          name: ms.membership_name.trim(),
+          status: String(ms.status || '').toUpperCase(),
+          start: start ? new Date(start > 1e11 ? start : start * 1000).toISOString() : null,
+          price: Number(ms.plan_price) || 0,
+          monthly: String(ms.duration_time_unit || '').toLowerCase() === 'month' && Number(ms.duration_time_unit_count || 1) === 1,
+        });
+      }
     }
   }
 }
@@ -40,4 +59,4 @@ for (const b of cfg.branches) {
 }
 if (problems.length) throw new Error(`Glofox sync stopped, nothing was changed: ${[...new Set(problems)].join('; ')}`);
 
-return [{ json: { counts, holders, members: seen.size, perBranch } }];
+return [{ json: { counts, holders, held, accounts, members: seen.size, perBranch } }];

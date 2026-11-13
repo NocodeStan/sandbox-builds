@@ -146,7 +146,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Counts members per Glofox membership name, for the statuses in countStatuses.\n// Refuses to continue on an error page or an incomplete list, so a partial read never overwrites Active Members.\nconst { cfg } = $('Config').first().json;\nconst statuses = new Set(cfg.countStatuses.map((s) => String(s).toUpperCase()));\nconst pages = $input.all().map((i) => i.json);\n\nconst problems = [];\nconst seen = new Set();\nconst perBranch = {}; // branch id → { expected, got }\nconst counts = {}; // lower-case membership name → { name, n }\nconst holders = {}; // lower-case email → membership names held (same statuses), for the waitlist's existing-member flag\nfor (const p of pages) {\n  if (!p || p.success === false || p.message || !Array.isArray(p.data)) {\n    problems.push(String((p && (p.message || p.error)) || 'unreadable page').slice(0, 200));\n    continue;\n  }\n  for (const m of p.data) {\n    const b = m.branch_id || '?';\n    perBranch[b] = perBranch[b] || { expected: Number(p.total_count) || 0, got: 0 };\n    perBranch[b].got += 1;\n    if (seen.has(m._id)) continue;\n    seen.add(m._id);\n    const ms = m.membership || {};\n    if (!ms.membership_name || !statuses.has(String(ms.status || '').toUpperCase())) continue;\n    const key = ms.membership_name.trim().toLowerCase();\n    counts[key] = counts[key] || { name: ms.membership_name.trim(), n: 0 };\n    counts[key].n += 1;\n    for (const raw of [m.email, m.account_email, m.contact_email]) {\n      const email = String(raw || '').trim().toLowerCase();\n      if (!email) continue;\n      holders[email] = holders[email] || [];\n      if (!holders[email].includes(ms.membership_name.trim())) holders[email].push(ms.membership_name.trim());\n    }\n  }\n}\nfor (const b of cfg.branches) {\n  const r = perBranch[b.id];\n  if (!r) problems.push(`${b.name}: no members returned`);\n  else if (Math.abs(r.got - r.expected) > Math.max(5, r.expected * 0.01)) problems.push(`${b.name}: read ${r.got} of ${r.expected} members`);\n}\nif (problems.length) throw new Error(`Glofox sync stopped, nothing was changed: ${[...new Set(problems)].join('; ')}`);\n\nreturn [{ json: { counts, holders, members: seen.size, perBranch } }];\n"
+        "jsCode": "// Counts members per Glofox membership name, for the statuses in countStatuses.\n// Refuses to continue on an error page or an incomplete list, so a partial read never overwrites Active Members.\nconst { cfg } = $('Config').first().json;\nconst statuses = new Set(cfg.countStatuses.map((s) => String(s).toUpperCase()));\nconst pages = $input.all().map((i) => i.json);\n\nconst problems = [];\nconst seen = new Set();\nconst perBranch = {}; // branch id → { expected, got }\nconst counts = {}; // lower-case membership name → { name, n }\nconst holders = {}; // lower-case email → membership names held (same statuses), for the waitlist's existing-member flag\nconst held = {}; // lower-case email → [{ id, name, status, start, price, monthly }], for verifying waitlist purchases\nconst accounts = {}; // lower-case email → true for every Glofox account (members and pay-as-you-go)\nfor (const p of pages) {\n  if (!p || p.success === false || p.message || !Array.isArray(p.data)) {\n    problems.push(String((p && (p.message || p.error)) || 'unreadable page').slice(0, 200));\n    continue;\n  }\n  for (const m of p.data) {\n    const b = m.branch_id || '?';\n    perBranch[b] = perBranch[b] || { expected: Number(p.total_count) || 0, got: 0 };\n    perBranch[b].got += 1;\n    if (seen.has(m._id)) continue;\n    seen.add(m._id);\n    const ms = m.membership || {};\n    for (const raw of [m.email, m.account_email, m.contact_email]) {\n      const email = String(raw || '').trim().toLowerCase();\n      if (email) accounts[email] = true;\n    }\n    if (!ms.membership_name || !statuses.has(String(ms.status || '').toUpperCase())) continue;\n    const key = ms.membership_name.trim().toLowerCase();\n    counts[key] = counts[key] || { name: ms.membership_name.trim(), n: 0 };\n    counts[key].n += 1;\n    for (const raw of [m.email, m.account_email, m.contact_email]) {\n      const email = String(raw || '').trim().toLowerCase();\n      if (!email) continue;\n      holders[email] = holders[email] || [];\n      if (!holders[email].includes(ms.membership_name.trim())) holders[email].push(ms.membership_name.trim());\n      held[email] = held[email] || [];\n      const id = ms.user_membership_id || ms._id || m._id;\n      if (!held[email].some((h) => h.id === id)) {\n        const start = Number(ms.start_date) || 0;\n        held[email].push({\n          id,\n          name: ms.membership_name.trim(),\n          status: String(ms.status || '').toUpperCase(),\n          start: start ? new Date(start > 1e11 ? start : start * 1000).toISOString() : null,\n          price: Number(ms.plan_price) || 0,\n          monthly: String(ms.duration_time_unit || '').toLowerCase() === 'month' && Number(ms.duration_time_unit_count || 1) === 1,\n        });\n      }\n    }\n  }\n}\nfor (const b of cfg.branches) {\n  const r = perBranch[b.id];\n  if (!r) problems.push(`${b.name}: no members returned`);\n  else if (Math.abs(r.got - r.expected) > Math.max(5, r.expected * 0.01)) problems.push(`${b.name}: read ${r.got} of ${r.expected} members`);\n}\nif (problems.length) throw new Error(`Glofox sync stopped, nothing was changed: ${[...new Set(problems)].join('; ')}`);\n\nreturn [{ json: { counts, holders, held, accounts, members: seen.size, perBranch } }];\n"
       },
       "id": "6c700bb6-07e8-4cbe-ad8f-edfee673b7b6",
       "name": "Count Members",
@@ -397,7 +397,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Marks waitlist people who already hold a Glofox membership: \"Glofox Membership\" lists what they hold.\n// Their invite becomes the upgrade version (staff change the membership; the sign-up link can't).\n// Only rows whose value changes are written; someone who no longer holds a membership is cleared.\nconst { holders } = $('Count Members').first().json;\nconst rows = $('Get Waitlist').all().flatMap((i) => i.json.records || []);\nconst writes = [];\nfor (const r of rows) {\n  const email = String(r.fields.Email || '').trim().toLowerCase();\n  const want = (holders[email] || []).slice().sort().join('; ');\n  const have = String(r.fields['Glofox Membership'] || '').trim();\n  if (want !== have) writes.push({ id: r.id, fields: { 'Glofox Membership': want || null } });\n}\nconst chunks = [];\nfor (let i = 0; i < writes.length; i += 10) chunks.push({ records: writes.slice(i, i + 10), typecast: true });\nreturn [{ json: { chunks, changed: writes.length, flagged: rows.filter((r) => holders[String(r.fields.Email || '').trim().toLowerCase()]).length } }];\n"
+        "jsCode": "// Two daily jobs on the Waitlist, from the same Glofox read:\n// 1) \"Glofox Membership\" lists what each person already holds (existing members get the upgrade invite).\n// 2) Purchase verification for the revenue dashboard. Someone the waitlist invited counts as a verified purchase\n//    (\"Glofox Verified At\") once Glofox shows them, by email, holding one of their queue's memberships (the Capacity\n//    row's \"Glofox Memberships\" names, counted statuses only) that started no earlier than the day before their invite.\n//    \"Monthly Value\" is what the person adds per month: the queue's price, or for an existing member's upgrade the\n//    difference from the membership they already hold. Once verified it is fixed at the verified amount (Glofox's\n//    monthly plan price when it has one). \"Glofox Check\" says, for people who signed up or asked for a tour, what\n//    Glofox shows, so staff can follow up on sign-ups that never completed.\n// Only fields that change are written. Each new verification adds one \"Purchase Verified\" row to the Activity Log.\nconst { cfg } = $('Config').first().json;\nconst { holders, held = {}, accounts = {} } = $('Count Members').first().json;\nconst rows = $('Get Waitlist').all().flatMap((i) => i.json.records || []);\nconst caps = $('Get Capacity').all().flatMap((i) => i.json.records || []);\nconst NOW = new Date().toISOString();\nconst counted = new Set(cfg.countStatuses.map((s) => String(s).toUpperCase()));\nconst DAY = 24 * 3600 * 1000;\n\nconst lc = (s) => String(s || '').trim().toLowerCase();\nconst queueKey = (loc, mem) => `${lc(loc)}|${lc(mem)}`;\nconst queues = {}; // location|membership → { price, names }\nfor (const c of caps) {\n  const k = queueKey(c.fields.Location, c.fields.Membership);\n  const q = (queues[k] = queues[k] || { price: 0, names: new Set() });\n  if (!q.price && Number(c.fields.Price) > 0) q.price = Number(c.fields.Price);\n  for (const n of String(c.fields['Glofox Memberships'] || '').split('\\n').map(lc).filter(Boolean)) q.names.add(n);\n}\nconst priceOfMembership = (name) => {\n  for (const q of Object.values(queues)) if (q.price && q.names.has(lc(name))) return q.price;\n  return 0;\n};\nconst day = (iso) => new Date(iso).toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });\nconst place = (loc) => (/^akari\\b/i.test(String(loc || '')) ? loc : `Akari ${loc}`);\n\nconst writes = [];\nconst logs = [];\nlet verifiedTotal = 0;\nfor (const r of rows) {\n  const f = r.fields;\n  const email = lc(f.Email);\n  const fields = {};\n\n  const have = String(f['Glofox Membership'] || '').trim();\n  const want = (holders[email] || []).slice().sort().join('; ');\n  if (want !== have) fields['Glofox Membership'] = want || null;\n\n  const q = queues[queueKey(f.Location, f.Membership)] || { price: 0, names: new Set() };\n  const existing = f['Member Type'] === 'Existing';\n  // What an upgrade adds is the difference from what they already pay (yesterday's \"Glofox Membership\").\n  const paysNow = have ? Math.max(0, ...have.split(';').map(priceOfMembership)) : 0;\n  const addsPerMonth = (price) => (price ? Math.max(price - (existing ? paysNow : 0), 0) : null);\n\n  if (f['Glofox Verified At']) {\n    verifiedTotal += 1;\n  } else {\n    const invitedAt = f['Invited At'] ? Date.parse(f['Invited At']) : NaN;\n    const match = (held[email] || []).find((h) => q.names.has(lc(h.name)) && counted.has(h.status)\n      && h.start && Date.parse(h.start) >= invitedAt - DAY);\n    if (match) {\n      const value = addsPerMonth(match.monthly && match.price ? match.price : q.price) || 0;\n      const check = `Verified in Glofox: ${match.name} (${match.status.toLowerCase()}) from ${day(match.start)}${match.price ? `, $${match.price}/mo` : ''}`;\n      Object.assign(fields, { 'Glofox Verified At': NOW, 'Monthly Value': value, 'Glofox Check': check });\n      verifiedTotal += 1;\n      logs.push({\n        fields: {\n          Summary: `Purchase verified: ${f.Name || f.Email} - ${f.Membership} at ${place(f.Location)}`,\n          Timestamp: NOW, Event: 'Purchase Verified', Email: f.Email, Name: f.Name, Location: f.Location, Membership: f.Membership, Source: 'Glofox',\n          Detail: `${check}. Adds $${value}/month${existing ? ' (upgrade: the difference from their previous membership)' : ''}.`,\n          'Entry ID': r.id,\n        },\n      });\n    } else {\n      const value = addsPerMonth(q.price);\n      if (value !== (f['Monthly Value'] ?? null)) fields['Monthly Value'] = value;\n      let check = '';\n      if (f.Status === 'Signed Up' || f.Status === 'Tour Requested') {\n        const step = f.Status === 'Signed Up' ? 'Signed up' : 'Tour requested';\n        const holds = (held[email] || []).filter((h) => counted.has(h.status)).map((h) => h.name);\n        check = !accounts[email] ? `${step}; no Glofox account under this email yet`\n          : holds.length ? `${step}; Glofox shows ${holds.join(', ')}, not this queue's membership yet`\n            : `${step}; Glofox account, no membership yet`;\n      }\n      if (check !== String(f['Glofox Check'] || '')) fields['Glofox Check'] = check || null;\n    }\n  }\n  if (Object.keys(fields).length) writes.push({ id: r.id, fields });\n}\nconst chunk = (list) => {\n  const out = [];\n  for (let i = 0; i < list.length; i += 10) out.push({ records: list.slice(i, i + 10), typecast: true });\n  return out;\n};\nreturn [{\n  json: {\n    chunks: chunk(writes), logChunks: chunk(logs), changed: writes.length, newlyVerified: logs.length, verifiedTotal,\n    flagged: rows.filter((r) => holders[lc(r.fields.Email)]).length,\n  },\n}];\n"
       },
       "id": "357655ec-c4e2-4030-abf3-bfa59d04f0f9",
       "name": "Plan Member Flags",
@@ -482,6 +482,90 @@
       "position": [
         3300,
         0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "akariAirtablePAT",
+          "name": "Airtable PAT (Akari)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "37fb4ecd-aa60-4336-a9c3-36d51a35c32b",
+              "leftValue": "={{ ($('Plan Member Flags').first().json.logChunks || []).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "acf0c99b-211a-4194-a8cf-91acb8de1197",
+      "name": "Any New Purchases?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per 10-row Activity Log insert of newly verified purchases.\nreturn $('Plan Member Flags').first().json.logChunks.map((c) => ({ json: c }));\n"
+      },
+      "id": "b972ea53-4d5c-4cbf-a6ba-0e759389be74",
+      "name": "Split Purchase Logs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        260
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.cfg.urls.log }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      },
+      "id": "9c5ab6a7-aa86-4f61-a708-7b7ac7514521",
+      "name": "Log Purchases",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        260
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -650,6 +734,34 @@
         [
           {
             "node": "Any Flag Changes?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Any New Purchases?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any New Purchases?": {
+      "main": [
+        [
+          {
+            "node": "Split Purchase Logs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Split Purchase Logs": {
+      "main": [
+        [
+          {
+            "node": "Log Purchases",
             "type": "main",
             "index": 0
           }
