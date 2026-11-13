@@ -164,7 +164,9 @@ IF(OR({Status} = "Waiting", {Status} = ""), "9 · Waiting", "10 · Left the wait
   ['Waitlist', 'Open Offer MRR', `IF(AND(${NOT_VERIFIED}, {Status} = "Invited"), {Monthly Value}, 0)`],
   ['Waitlist', 'Verified Annual Value', '{Verified MRR} * 12'],
   ['Waitlist', 'Hours to Reply', 'IF(AND({Invited At}, {Response At}, IS_AFTER({Response At}, {Invited At})), ROUND(DATETIME_DIFF({Response At}, {Invited At}, "minutes") / 60, 1))'],
+  ['Capacity', 'Open Spots', 'MAX(0, {Minimum Members} - {Active Members})'],
   ['Capacity', 'Fill Rate', 'IF({Minimum Members}, ROUND({Active Members} / {Minimum Members} * 100))'],
+  ['Capacity', 'Open Spots Value', 'IF({Enabled}, {Open Spots} * {Price}, 0)'],
 ];
 for (const [tableName, name, formula] of REVENUE_FORMULAS) {
   const table = (await api('GET', `meta/bases/${BASE}/tables`)).tables.find((t) => t.name === tableName);
