@@ -33,7 +33,7 @@ function normEntry(r) {
     id: r.id,
     name: f['Name'] || '',
     email: String(f['Email'] || '').trim().toLowerCase(),
-    phone: f['Phone'] || '',
+    phone: String(f['Phone'] || '').replace(/^'+/, ''), // spreadsheet exports prefix numbers with '
     location: f['Location'] || '',
     membership: f['Membership'] || '',
     memberType: f['Member Type'] === 'Existing' ? 'Existing' : 'New',
@@ -51,6 +51,8 @@ function normEntry(r) {
     reason: f['Reason'] || '',
     tourAt: toDate(f['Tour At']),
     interestConfirmedAt: toDate(f['Interest Confirmed At']),
+    // Memberships this person already holds in Glofox (set by the daily Glofox sync). Non-empty = existing member.
+    glofoxMembership: String(f['Glofox Membership'] || '').trim(),
   };
 }
 
@@ -65,6 +67,13 @@ function tourBookingUrl(e, settings) {
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join('&');
   return `${base}${base.includes('?') ? '&' : '?'}${params}`;
+}
+
+// Locations whose tour can be booked at any of several places (e.g. All-Access: any Akari Sauna location).
+// Returns [{ location, url }] for each one that has a booking page; empty when the queue has its own link.
+function tourChoices(e) {
+  const locs = (CFG.tourChoiceLocations || {})[e.location] || [];
+  return locs.map((location) => ({ location, url: tourBookingUrl({ ...e, location }, null) })).filter((c) => c.url);
 }
 
 function logRow(e, event, extra = {}) {

@@ -5,7 +5,7 @@
 const cfg = {
   airtableBaseId: 'appXXXXXXXXXXXXXX', // same base as the waitlist workflow
   airtableApi: 'https://api.airtable.com/v0',
-  tables: { capacity: 'Capacity', log: 'Activity Log' },
+  tables: { capacity: 'Capacity', log: 'Activity Log', waitlist: 'Waitlist' },
 
   glofoxApi: 'https://YOUR-GLOFOX-PROXY/prod', // Glofox API base (your proxy), no trailing slash
   // Each branch's members are listed with that branch's ID. A member is counted once, however many branches list them.
@@ -26,6 +26,7 @@ const base = `${cfg.airtableApi}/${cfg.airtableBaseId}`;
 cfg.urls = {
   capacity: `${base}/${encodeURIComponent(cfg.tables.capacity)}`,
   log: `${base}/${encodeURIComponent(cfg.tables.log)}`,
+  waitlist: `${base}/${encodeURIComponent(cfg.tables.waitlist)}`,
 };
 
 return [{ json: { cfg } }];

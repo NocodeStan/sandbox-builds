@@ -15,6 +15,7 @@ const cfg = {
   fromName: 'Akari Sauna',
   replyToEmail: 'hello@YOUR-DOMAIN.com',
   teamEmails: ['team@YOUR-DOMAIN.com'], // daily report + tour-request alerts
+  upgradeTeamEmails: [], // where existing members' upgrade choices go (blank = teamEmails)
 
   // Email content (confirmed with Jack, 9 Oct)
   membershipPageUrl: 'https://www.akarisauna.com/membership', // same for every location
@@ -27,6 +28,8 @@ const cfg = {
     Greenpoint: 'https://akari-sauna.cal.com/akari-greenpoint/akari-greenpoint-tours',
     LES: 'https://akari-sauna.cal.com/hello/akari-les-tours',
   }, // from Jack, 28 Oct
+  // Queues with no booking page of their own can offer a choice of locations to tour (All-Access covers all three).
+  tourChoiceLocations: { 'All-Access': ['Williamsburg', 'Greenpoint', 'LES'] },
   tourReleaseHours: 48, // a tour hold is released this long after the booked tour, unless a sign-up link was sent
   calWebhookSecret: 'CHANGE-ME', // long random string; goes on the end of the Cal.com webhook URL (?k=...)
 

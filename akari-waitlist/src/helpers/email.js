@@ -23,15 +23,58 @@ function respondLink(token, action) {
   return `${CFG.publicWebhookBase}/respond?t=${encodeURIComponent(token)}&a=${action}`;
 }
 
-function inviteEmail(e, token, expires) {
-  const until = fmtTime(expires);
-  // Price: the queue's Capacity row (Price), else Config's priceByTier; none = point to the membership page.
+// Price: the queue's Capacity row (Price), else Config's priceByTier; none = point to the membership page.
+function costLines(e) {
   const price = e.price != null && e.price !== '' ? e.price : CFG.priceByTier && CFG.priceByTier[e.membership];
   const costLine = price
     ? `The cost for your membership will be $${price}/month, and additional membership details can be found on our membership page here ${CFG.membershipPageUrl}.`
     : `Additional membership details, including pricing, can be found on our membership page here ${CFG.membershipPageUrl}.`;
   const pageLink = `<a href="${esc(CFG.membershipPageUrl)}" style="color:#1f1d1a">here</a>`;
-  const costHtml = esc(costLine).replace(`here ${esc(CFG.membershipPageUrl)}`, pageLink);
+  return { costLine, costHtml: esc(costLine).replace(`here ${esc(CFG.membershipPageUrl)}`, pageLink) };
+}
+
+// People who already hold a Glofox membership can't use the direct sign-up link (Glofox makes staff do the
+// change), so they get Jack's upgrade version (13 Nov): three choices, each emailed to the membership team.
+const UPGRADE_ACTIONS = {
+  upgradenow: 'Upgrade today - prorate the difference',
+  upgradenext: 'Upgrade on my next billing cycle',
+  keep: 'Keep my current membership',
+};
+function upgradeInviteEmail(e, token, expires) {
+  const until = fmtTime(expires);
+  const { costLine, costHtml } = costLines(e);
+  const html = emailLayout(`
+<p>Hi ${esc(firstName(e.name))},</p>
+<p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at ${esc(place(e.location))}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
+<p>${costHtml} We'll hold it for you until <strong>${esc(until)}</strong>. After that it goes to the next person in line.</p>
+<p>Please let us know how you would like to proceed:</p>
+${btn(respondLink(token, 'upgradenow'), UPGRADE_ACTIONS.upgradenow, true)}
+${btn(respondLink(token, 'upgradenext'), UPGRADE_ACTIONS.upgradenext)}
+${btn(respondLink(token, 'keep'), UPGRADE_ACTIONS.keep)}
+<p>For any questions about the membership or Akari in general, please reply to this email and we will get back to you shortly!</p>
+<p>Warmly,<br>Akari team</p>`, 'Your spot is available for a limited time');
+  const text = `Hi ${firstName(e.name)},
+
+We really appreciate your patience during the waitlist process for the ${e.membership} membership at ${place(e.location)}. We are in the process of opening more memberships this month, and we would love to have you join us!
+
+${costLine} We'll hold it for you until ${until}. After that it goes to the next person in line.
+
+Please let us know how you would like to proceed:
+${UPGRADE_ACTIONS.upgradenow}: ${respondLink(token, 'upgradenow')}
+${UPGRADE_ACTIONS.upgradenext}: ${respondLink(token, 'upgradenext')}
+${UPGRADE_ACTIONS.keep}: ${respondLink(token, 'keep')}
+
+For any questions about the membership or Akari in general, please reply to this email and we will get back to you shortly!
+
+Warmly,
+Akari team`;
+  return { to: e.email, name: e.name, subject: `${e.membership} Membership Now Available at ${place(e.location)}`, html, text };
+}
+
+function inviteEmail(e, token, expires) {
+  if (e.glofoxMembership) return upgradeInviteEmail(e, token, expires);
+  const until = fmtTime(expires);
+  const { costLine, costHtml } = costLines(e);
   const html = emailLayout(`
 <p>Hi ${esc(firstName(e.name))},</p>
 <p>We really appreciate your patience during the waitlist process for the ${esc(e.membership)} membership at ${esc(place(e.location))}. We are in the process of opening more memberships this month, and we would love to have you join us!</p>
@@ -100,6 +143,35 @@ Please let us know if you have any issues signing up!
 Warmly,
 Akari team`;
   return { to: e.email, name: e.name, subject: `Your Private Sign Up Link for ${place(e.location)}`, html, text };
+}
+
+// The membership team makes the change in Glofox: one email per answer, with everything they need.
+function upgradeAlert(e, action) {
+  const choice = UPGRADE_ACTIONS[action];
+  const todo = action === 'keep'
+    ? 'No change needed. They have been taken off this waitlist and the spot goes to the next person.'
+    : action === 'upgradenow'
+      ? "Please upgrade their membership in Glofox today and prorate the difference, then let them know it's done."
+      : "Please schedule the upgrade in Glofox for their next billing cycle, then let them know it's set up.";
+  const rows = [
+    ['Name', e.name || '-'],
+    ['Email', e.email],
+    ['Phone', e.phone || '-'],
+    ['New membership', `${e.membership} at ${place(e.location)}`],
+    ['Current Glofox membership', e.glofoxMembership || '-'],
+    ['Their choice', choice],
+  ];
+  const html = emailLayout(`
+<p>Hi team,</p>
+<p><strong>${esc(e.name || e.email)}</strong> answered their waitlist invite: <strong>${esc(choice)}</strong>.</p>
+<p>${rows.map(([k, v]) => `${esc(k)}: ${esc(v)}`).join('<br>')}</p>
+<p>${esc(todo)}</p>
+<p>Thank you,<br>Akari team</p>`, `${choice}: ${e.name || e.email}`);
+  const text = ['Hi team,', '', `${e.name || e.email} answered their waitlist invite: ${choice}.`, '',
+    ...rows.map(([k, v]) => `${k}: ${v}`), '', todo, '', 'Thank you,', 'Akari team'].join('\n');
+  const to = (CFG.upgradeTeamEmails || []).length ? CFG.upgradeTeamEmails : CFG.teamEmails;
+  const subject = `${action === 'keep' ? 'Keeping current membership' : 'Membership upgrade'}: ${e.name || e.email} - ${e.membership} at ${place(e.location)}`;
+  return { to, subject, html, text };
 }
 
 // Test mode (testRecipient set) redirects every email to that one inbox, except to people on

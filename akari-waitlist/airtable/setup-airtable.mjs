@@ -47,7 +47,7 @@ const TABLES = [
       ['Invite Token', text], ['Invited At', dateTime], ['Invite Expires At', dateTime],
       ['Invite Source', select(['Auto', 'Send Now'])], ['Timeout Count', integer],
       ['Primed At', dateTime], ['Response At', dateTime],
-      ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Interest Confirmed At', dateTime], ['Notes', long],
+      ['Reason', long], ['Tour Notes', long], ['Tour At', dateTime], ['Interest Confirmed At', dateTime], ['Glofox Membership', text], ['Notes', long],
     ],
   },
   {

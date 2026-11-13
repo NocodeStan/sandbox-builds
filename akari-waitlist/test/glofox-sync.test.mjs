@@ -85,3 +85,25 @@ test('daily summary: flags a sync that did not run, and surfaces held-back count
   assert.doesNotMatch(html, /has not run/);
   assert.match(html, /Glofox sync: Held back[^<]*Williamsburg · Unlimited 261 → 1/);
 });
+
+test('existing members on the waitlist: "Glofox Membership" set for holders, cleared when they no longer hold one, unchanged rows not written', () => {
+  const pages = [
+    page([{ ...member(WB, 'Daytime Membership'), email: 'Holder@Example.com' }, { ...member(WB, 'Unlimited Membership', 'PAUSED'), email: 'paused@example.com' }, { ...member(WB, null), email: 'payg@example.com' }]),
+    page([member(GP, 'Greenpoint - Unlimited')]),
+    page([member(LES, 'LES Unlimited Membership')]),
+  ];
+  const c = count(pages);
+  assert.deepEqual(Object.keys(c.holders).sort(), ['holder@example.com', 'paused@example.com'], 'pay-as-you-go accounts are not members');
+  const wl = [
+    { id: 'recA', fields: { Email: 'holder@example.com' } },
+    { id: 'recB', fields: { Email: 'paused@example.com', 'Glofox Membership': 'Unlimited Membership' } },
+    { id: 'recC', fields: { Email: 'left@example.com', 'Glofox Membership': 'Daytime Membership' } },
+    { id: 'recD', fields: { Email: 'payg@example.com' } },
+  ];
+  const out = runNode('glofox-member-flags', { nodes: { Config: [{ json: { cfg: cfg() } }], 'Count Members': [{ json: c }], 'Get Waitlist': records(wl) } })[0].json;
+  assert.deepEqual(out.chunks.flatMap((x) => x.records), [
+    { id: 'recA', fields: { 'Glofox Membership': 'Daytime Membership' } },
+    { id: 'recC', fields: { 'Glofox Membership': null } },
+  ]);
+  assert.equal(out.flagged, 2);
+});

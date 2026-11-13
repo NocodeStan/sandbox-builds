@@ -337,13 +337,9 @@ try {
   scenario('R2', 'Ava wants a tour first', 'Ava clicks "Tour first" and writes "Weekday evenings after 6".');
   const avaInv = inv(at(11));
   r = await confirm(avaInv, 'tour', 'Weekday evenings after 6');
-  expect('Ava is told her spot is held', () => has(r.page, /held for you/));
+  expect('Ava is told her spot is held and sent to Williamsburg\'s booking page', () => has(r.page, /held for you[\s\S]*url=https:\/\/cal\.test/));
   expect('status → Tour Requested, notes saved', () => eq([statusOf(at(11), 'Williamsburg', 'Unlimited'), rowOf(at(11), 'Williamsburg', 'Unlimited').fields['Tour Notes']], ['Tour Requested', 'Weekday evenings after 6']));
-  const tourMail = inbox(TEAM).find((m) => /^Tour Request: Ava Romero/.test(m.subject));
-  expect('team alert: "Tour Request: Ava Romero at Akari Williamsburg"', () => eq(tourMail?.subject, 'Tour Request: Ava Romero at Akari Williamsburg'));
-  expect('alert lists email, phone, waitlist date and preferred times', () => has(textOf(tourMail), /stan\+11@optimizewise\.org[\s\S]*\+17185550111[\s\S]*On the waitlist since[\s\S]*Weekday evenings after 6/));
-  expect('alert reads naturally: "committing to an Unlimited membership"', () => has(textOf(tourMail), /committing to an Unlimited membership/));
-  expect('alert tells staff exactly what to do after the tour (Send Sign-up Link)', () => has(textOf(tourMail), /Send Sign-up Link/));
+  expect('no team email: she books directly, and Cal.com tells the team (Jack, 13 Nov)', () => eq(inbox(TEAM).filter((m) => /^Tour Request: Ava Romero/.test(m.subject)).length, 0));
 
   scenario('R3', 'Noor is not ready yet', 'Noor clicks "Not ready yet" and writes "Back in town in November".');
   const noorView = await openLink(inv(at(5)), 'notnow');
@@ -534,7 +530,7 @@ try {
   expect('Ben timed out → No Reply; the Williamsburg Unlimited spot goes to Maya', () => eq([statusOf(at(12), 'Williamsburg', 'Unlimited'), e4.logs.filter((l) => l.Event === 'Invited' && l.Membership === 'Unlimited').map((l) => l.Name)], ['No Reply', ['Maya Chen']]));
   const mayaInv = inbox(at(1)).filter(isInvite).at(-1);
   await confirm(mayaInv, 'tour', 'Saturday morning');
-  expect('Maya asks for a tour; the alert reads "an Unlimited membership"', () => has(textOf(inbox(TEAM).filter((m) => /Tour Request: Maya/.test(m.subject)).at(-1)), /committing to an Unlimited membership/));
+  expect('Maya asks for a tour: held, Tour Requested, no team email (she books directly)', () => eq([statusOf(at(1), 'Williamsburg', 'Unlimited'), inbox(TEAM).filter((m) => /Tour Request: Maya/.test(m.subject)).length], ['Tour Requested', 0]));
 
   scenario('S7', 'Jack puts a No Reply person back in the queue', 'Guest10 phones to say the invite went to spam. Jack changes their Status from No Reply to Warm in Airtable.');
   W().find((x) => x.fields.Email === G(10) && x.fields.Membership === '4-Visit').fields.Status = 'Warm';

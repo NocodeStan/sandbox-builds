@@ -472,6 +472,12 @@ export function buildGlofoxSync() {
     code('Split Updates', [1760, 0], 'glofox-split', { executeOnce: true }),
     httpJson('Update Capacity', [1980, 0], 'PATCH', `={{ ${CFG('urls.capacity')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
     httpJson('Log Sync', [2200, 80], 'POST', `={{ ${CFG('urls.log')} }}`, "={{ JSON.stringify($('Plan Active Updates').first().json.log) }}", CREDS.airtable, {}, { executeOnce: true }),
+    // Existing members on the waitlist: "Glofox Membership" says what they hold, so their invite is the upgrade version.
+    airtableGet('Get Waitlist', [2420, 80], 'waitlist', '', { executeOnce: true }),
+    code('Plan Member Flags', [2640, 80], 'glofox-member-flags', { executeOnce: true }),
+    ifTrue('Any Flag Changes?', [2860, 80], '($json.chunks || []).length > 0'),
+    code('Split Flag Updates', [3080, 0], 'glofox-split-flags', { executeOnce: true }),
+    httpJson('Update Member Flags', [3300, 0], 'PATCH', `={{ ${CFG('urls.waitlist')} }}`, '={{ JSON.stringify($json) }}', CREDS.airtable, AIRTABLE_PACE),
   ];
   return {
     name: 'Akari Waitlist · Glofox Member Sync',
@@ -488,6 +494,11 @@ export function buildGlofoxSync() {
       'Anything to Write?': { main: [to('Split Updates'), to('Log Sync')] },
       'Split Updates': { main: [to('Update Capacity')] },
       'Update Capacity': { main: [to('Log Sync')] },
+      'Log Sync': { main: [to('Get Waitlist')] },
+      'Get Waitlist': { main: [to('Plan Member Flags')] },
+      'Plan Member Flags': { main: [to('Any Flag Changes?')] },
+      'Any Flag Changes?': { main: [to('Split Flag Updates'), []] },
+      'Split Flag Updates': { main: [to('Update Member Flags')] },
     },
     pinData: {},
     active: false,

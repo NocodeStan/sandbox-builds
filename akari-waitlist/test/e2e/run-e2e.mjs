@@ -21,6 +21,8 @@ mock.seed('Capacity', [
   { Queue: 'LES · Unlimited', Location: 'LES', Membership: 'Unlimited', 'Minimum Members': 50, 'Active Members': 0, Enabled: false },
 ]);
 const person = (name, fields) => ({ Name: name, Email: `${name.toLowerCase()}@example.com`, Location: 'Williamsburg', Membership: 'Unlimited', 'Member Type': 'New', Status: 'Waiting', 'Timeout Count': 0, ...fields });
+// Erin already holds a Glofox membership (set by the daily Glofox sync), so her invite is the upgrade version.
+const [erin] = mock.seed('Waitlist', [{ Name: 'Erin', Email: 'erin@example.com', Location: 'Greenpoint', Membership: 'Unlimited', 'Member Type': 'Existing', Status: 'Waiting', 'Timeout Count': 0, 'Joined At': new Date(Date.now() - 2 * 24 * 3600000).toISOString(), 'Glofox Membership': 'Greenpoint - Daytime' }]);
 const [alex, blair, casey, dana, alexDaytime] = mock.seed('Waitlist', [
   person('Alex', { 'Joined At': ago(60) }), // weighted 180
   person('Blair', { 'Joined At': ago(100), 'Member Type': 'Existing' }), // weighted 100
@@ -140,12 +142,14 @@ try {
     assert.equal(logs('Signed Up').length, 1);
   });
 
-  await step('Tour request → spot held (Tour Requested), team alerted with preferred times', async () => {
+  await step('Tour request with a Cal.com page → spot held (Tour Requested), sent to book; no team email (the booking tells them)', async () => {
     const r = await form({ t: tokenOf(dana.id), a: 'tour', reason: 'Saturday 10am' });
     assert.equal(r.status, 200);
+    assert.match(await r.text(), /Taking you to pick a tour time/);
     await waitFor(() => get(dana.id).fields.Status === 'Tour Requested', 'Dana tour requested');
     assert.equal(get(dana.id).fields['Tour Notes'], 'Saturday 10am');
-    await waitFor(() => emailsTo('team@YOUR-DOMAIN.com').some((m) => /Tour Request: Dana/.test(m.subject)), 'team alert');
+    await sleep(1500);
+    assert.equal(emailsTo('team@YOUR-DOMAIN.com').filter((m) => /Tour Request: Dana/.test(m.subject)).length, 0);
   });
 
   await step('Send Now: wrong key is refused', async () => {
@@ -262,6 +266,26 @@ try {
     const [les] = mock.seed('Waitlist', [person('Lesley', { Location: 'LES', 'Joined At': ago(3) })]);
     const noUrl = await fetch(`${BASE}/send-signup?id=${les.id}&k=${SECRET}`);
     assert.equal(noUrl.status, 409);
+  });
+
+  await step('Existing Glofox member: Send Now sends the upgrade invite; "Upgrade today" → Signed Up and the membership team is emailed', async () => {
+    const r = await fetch(`${BASE}/send-now?id=${erin.id}&k=${SECRET}`);
+    assert.equal(r.status, 200, await r.text());
+    const inviteMail = await waitFor(() => emailsTo('erin@example.com').find((m) => /Membership Now Available/.test(m.subject)), 'Erin invite');
+    const html = inviteMail.content[1].value;
+    assert.match(html, /a=upgradenow[^>]*>Upgrade today - prorate the difference</);
+    assert.doesNotMatch(html, /a=yes/);
+    await waitFor(() => logs('Invited').some((l) => l.fields.Email === 'erin@example.com'), 'invite logged');
+    await sleep(1500); // a person opens the email some time later; keeps this step's requests under Airtable's 5/s
+    const view = await (await fetch(`${BASE}/respond?t=${tokenOf(erin.id)}&a=upgradenow`)).text();
+    assert.match(view, /Upgrade today/);
+    assert.equal(get(erin.id).fields.Status, 'Invited', 'opening the link changes nothing');
+    await sleep(1500);
+    const done = await form({ t: tokenOf(erin.id), a: 'upgradenow' });
+    assert.match(await done.text(), /membership team will upgrade your account today/);
+    await waitFor(() => get(erin.id).fields.Status === 'Signed Up', 'Erin signed up');
+    const alert = await waitFor(() => emailsTo('team@YOUR-DOMAIN.com').find((m) => /^Membership upgrade: Erin/.test(m.subject)), 'upgrade email to the team');
+    assert.match(alert.content[0].value, /Current Glofox membership: Greenpoint - Daytime/);
   });
 
   await step('Airtable limits respected: no 429s, no >10-record batches, no bad formulas or payloads', async () => {

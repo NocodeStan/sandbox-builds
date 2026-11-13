@@ -28,17 +28,23 @@ test('tour confirm page: with a Cal.com link there is no text box, just "Choose 
   assert.match(without.page, /Request a tour/);
 });
 
-test('Tour first with a Cal.com link → spot held, team alerted, candidate sent to their location\'s booking page pre-filled', () => {
+test('Tour first with a Cal.com link → spot held, candidate sent to their location\'s booking page pre-filled, no email to the team (Jack, 13 Nov)', () => {
   const e = invited();
   const r = decide(e, 'tour', { cfg: CAL });
   assert.equal(r.actions[0].fields.Status, 'Tour Requested');
   const expected = `https://cal.com/akari/williamsburg-tour?name=Ava%20Romero&email=ava%40example.com&metadata%5Bentry%5D=${e.id}`;
   assert.ok(r.page.includes(`url=${expected.replace(/&/g, '&amp;')}`), r.page);
+  assert.equal(r.actions[0].email, null, 'the Cal.com booking itself tells the team');
+  assert.equal(r.actions[0].log.Event, 'Tour Requested', 'still logged, and the daily summary flags it if no booking follows');
+});
+
+test('Tour first with no booking page → the team is still emailed to arrange it', () => {
+  const r = decide(invited({ Location: 'Greenpoint' }), 'tour', { cfg: CAL, reason: 'Friday before 2pm' });
   const alert = r.actions[0].email.text;
-  assert.match(alert, /taken to our Cal\.com page to pick a tour time/);
+  assert.match(alert, /reach out within 1 business day/);
+  assert.match(alert, /Preferred times: Friday before 2pm/);
   assert.match(alert, /held until 48 hours after the tour/);
   assert.match(alert, /Send Sign-up Link/);
-  assert.doesNotMatch(alert, /reach out within 1 business day/);
 });
 
 test('Tour first again (already Tour Requested) → back to the booking page, nothing changes', () => {

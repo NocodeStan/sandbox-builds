@@ -179,6 +179,8 @@ Why: n8n drops credential references it can't match by ID when you import, even 
 | `testRecipient` | Your own inbox for Stage 2, then `''` |
 | `allowedRecipients` | While `testRecipient` is set, these get their email for real: `'name@x.com'` (also matches `name+2@x.com`) or `'@domain.com'` |
 | `tourBookingUrlByLocation` | Fallback Cal.com page per location (keys as on the form, e.g. `LES`). The Capacity row's **Tour Booking URL** wins. Blank = the "when suits you?" box |
+| `tourChoiceLocations` | Queues with no booking page of their own that offer a choice of locations to tour: `{ 'All-Access': ['Williamsburg', 'Greenpoint', 'LES'] }`. A Tour Booking URL on the Capacity row still wins |
+| `upgradeTeamEmails` | Where existing members' upgrade answers go (blank = `teamEmails`) |
 | `priceByTier` | Fallback price per membership name. The Capacity row's **Price** wins; neither = "pricing on the membership page" |
 | `tourReleaseHours` | How long after the booked tour the hold is released (48) |
 | `calWebhookSecret` | A long random string. It goes on the end of the Cal.com webhook URL (§4.7) |
@@ -216,6 +218,10 @@ A yes/no question containing "existing … member" sets Member Type. A short-tex
 
 ---
 
+### 4.7a Tours and existing members (13 Nov, after go-live)
+- **Tour first** with a booking page (the queue's Tour Booking URL, or Config's link for its location) sends the person straight to Cal.com and **does not email the team**: the Cal.com booking notifies them, and **Tour At** fills in through the webhook. All-Access shows a page with the three locations' booking links (`tourChoiceLocations`). Only queues with no booking page at all keep the "when suits you?" box and the team email. Unbooked requests still appear in the daily summary (*Tour requests not yet booked*). Turning off "Requires confirmation" on the Cal.com event types is a Cal.com setting.
+- **Existing members** can't use the direct Glofox sign-up link. The daily Glofox sync writes **Glofox Membership** on each waitlist row whose email holds a membership in Glofox (same statuses as `countStatuses`). Their invite (engine or Send Now) is the upgrade version with three buttons: *Upgrade today - prorate the difference*, *Upgrade on my next billing cycle* (both → Signed Up, spot taken, Unlimited still removes them from other lists) and *Keep my current membership* (→ No Longer Interested). Each answer emails `upgradeTeamEmails` (or `teamEmails`) with what to change in Glofox. Someone who signs up between syncs gets the standard invite until the next morning's sync marks them.
+
 ### 4.8 Glofox member sync (`akari-glofox-member-sync.json`)
 Keeps **Active Members** true to Glofox, once a day at 5:30am New York (before the 7:30 summary and the first 8am invites).
 
@@ -224,7 +230,7 @@ Keeps **Active Members** true to Glofox, once a day at 5:30am New York (before t
 3. Capacity › **Glofox Memberships**: the Glofox membership names counted for that row, one per line, spelled as Glofox shows them (e.g. `Unlimited Membership` and `Unlimited Membership - Founding Members` both count for Williamsburg · Unlimited). Rows with this column empty are left alone.
 4. Settings → Error workflow → **Akari Waitlist · Error Alert**, then **Publish**. **Run Now** runs it on demand.
 
-What it does: pages through every member of each branch (about 45 requests, ~15 seconds), counts each person once, adds up each row's names, writes **Active Members** only where the number changed, and stamps **Active Counted At** on every mapped row (the engine treats that as a recount, so sign-ups before it stop counting as pending). Safety: an error page, a missing branch or an incomplete list stops the run with nothing changed (and the error alert fires); a count that falls by more than half (`maxDropShare`) is held back and flagged. Each run writes one **Active Synced** row to the Activity Log listing what changed, mapped names Glofox doesn't know, and Glofox memberships not counted in any queue. The daily summary flags a sync that hasn't run in a day, held-back counts and unknown names. Successful runs don't save execution data in n8n, so member details aren't kept there.
+What it does: pages through every member of each branch (about 45 requests, ~15 seconds), counts each person once, adds up each row's names, writes **Active Members** only where the number changed, and stamps **Active Counted At** on every mapped row (the engine treats that as a recount, so sign-ups before it stop counting as pending). Safety: an error page, a missing branch or an incomplete list stops the run with nothing changed (and the error alert fires); a count that falls by more than half (`maxDropShare`) is held back and flagged. It then marks existing members on the Waitlist (**Glofox Membership**, see 4.7a), writing only rows that change. Each run writes one **Active Synced** row to the Activity Log listing what changed, mapped names Glofox doesn't know, and Glofox memberships not counted in any queue. The daily summary flags a sync that hasn't run in a day, held-back counts and unknown names. Successful runs don't save execution data in n8n, so member details aren't kept there.
 
 ---
 

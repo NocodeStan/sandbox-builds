@@ -58,6 +58,12 @@ if (e.status === 'Signed Up' && action !== 'leave') {
 }
 
 const calUrl = tourBookingUrl(e, settings);
+// No booking page of its own (e.g. All-Access): offer the locations it covers instead.
+const choices = calUrl ? [] : tourChoices(e);
+// When they can book straight into Cal.com, the booking itself tells the team (Jack, 13 Nov: no request email).
+const selfBook = !!calUrl || choices.length > 0;
+const chooser = (title, lead, actions = acts) => reply(200, title, `<p>${lead}</p><p>Pick the location you'd like to see:</p>${choices
+  .map((c) => `<a class="button" href="${esc(c.url)}">Tour ${esc(place(c.location))}</a>`).join('')}`, actions);
 
 function tourAlert(late) {
   const signupDate = fmtTime(e.joinedAt);
@@ -123,18 +129,44 @@ switch (action) {
   case 'tour': {
     if (e.status === 'Tour Requested') {
       if (calUrl) return toCalendar('Pick your tour time', 'Your spot is still held. Taking you to pick or change your tour time.', []);
+      if (choices.length) return chooser('Pick your tour time', 'Your spot is still held.', []);
       return reply(200, 'Tour already requested', '<p>We already have your tour request and your spot is held. We\'ll be in touch shortly.</p>');
     }
     if (onTime) {
-      update(e, { Status: 'Tour Requested', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(false), logRow(e, 'Tour Requested', { Reason: note }));
+      update(e, { Status: 'Tour Requested', 'Response At': nowIso, 'Tour Notes': note }, selfBook ? null : tourAlert(false), logRow(e, 'Tour Requested', { Reason: note }));
       if (calUrl) return toCalendar('Pick your tour time', `Your ${q} spot is held for you. Taking you to pick a tour time.`);
+      if (choices.length) return chooser('Book your tour', `Your ${esc(q)} spot is held for you.`);
       return reply(200, 'Tour requested', `<p>Thanks — we'll be in touch to arrange your tour. Your ${esc(q)} spot is held for you in the meantime.</p>`, acts);
     }
-    update(e, { Status: 'Warm', 'Response At': nowIso, 'Tour Notes': note }, tourAlert(true), logRow(e, 'Late Reply', { Reason: note, Detail: declined ? `Asked for a tour after answering "${e.status}" → Warm` : 'Asked for a tour after the hold expired → Warm' }));
+    update(e, { Status: 'Warm', 'Response At': nowIso, 'Tour Notes': note }, selfBook ? null : tourAlert(true), logRow(e, 'Late Reply', { Reason: note, Detail: declined ? `Asked for a tour after answering "${e.status}" → Warm` : 'Asked for a tour after the hold expired → Warm' }));
     const lead = declined ? `Because you'd told us you weren't ready, your ${esc(q)} spot went to the next person.` : `Your hold on the ${esc(q)} passed before we heard back, so it has gone to the next person.`;
     if (calUrl) return reply(200, 'You can still book a tour', `<p>${lead} You're now <strong>first in line</strong> for the next spot.</p><p>You're still welcome to come and see the space:</p><a class="button" href="${esc(calUrl)}">Choose a tour time</a>`, acts);
+    if (choices.length) return chooser('You can still book a tour', `${lead} You're now <strong>first in line</strong> for the next spot. You're still welcome to come and see the space.`);
     return reply(200, 'Thanks — we\'ll be in touch', `<p>${lead} You're now <strong>first in line</strong> for the next spot, and our team will reach out about a tour.</p>`, acts);
   }
+  case 'upgradenow':
+  case 'upgradenext': {
+    // Existing members: staff make the change in Glofox, so no sign-up link; the spot is theirs (Signed Up).
+    if (!onTime) {
+      update(e, { Status: 'Warm', 'Response At': nowIso }, null, logRow(e, 'Late Reply', {
+        Detail: declined ? `Chose "${UPGRADE_ACTIONS[action]}" after answering "${e.status}" → Warm` : `Chose "${UPGRADE_ACTIONS[action]}" after the hold expired → Warm`,
+      }));
+      return reply(200, 'Your hold has lapsed', `<p>Your ${CFG.holdHours}-hour hold on the ${esc(q)} passed before we heard back, so it has gone to the next person.</p><p>The good news: you're now <strong>first in line</strong> for the next spot, and we'll email you as soon as it opens.</p>`, acts);
+    }
+    const unlimited = /unlimited/i.test(e.membership);
+    const removed = unlimited ? others : [];
+    update(e, { Status: 'Signed Up', 'Response At': nowIso, Reason: UPGRADE_ACTIONS[action] }, upgradeAlert(e, action),
+      logRow(e, 'Signed Up', { Source: e.source || 'Auto', Detail: `Existing member: ${UPGRADE_ACTIONS[action]}. Membership team to change it in Glofox.` }));
+    for (const o of removed) {
+      update(o, { Status: 'Removed', Reason: `Auto-removed: upgrading to ${e.membership} at ${e.location}` }, null, logRow(o, 'Removed', { Detail: 'Upgrading to Unlimited elsewhere' }));
+    }
+    const when = action === 'upgradenow' ? 'today, and prorate the difference' : 'from your next billing cycle';
+    return reply(200, 'Your spot is confirmed', `<p>Thank you, your ${esc(q)} spot is confirmed.</p><p>Our membership team will upgrade your account ${when}, and email you once it's done. There's nothing else you need to do.</p>`, acts);
+  }
+  case 'keep':
+    update(e, { Status: 'No Longer Interested', 'Response At': nowIso, Reason: 'Keeping their current membership' }, upgradeAlert(e, 'keep'),
+      logRow(e, 'No Longer Interested', { Reason: 'Keeping their current membership', Detail: 'Existing member chose "Keep my current membership"' }));
+    return reply(200, 'No problem', `<p>Thanks for letting us know. You'll keep your current membership, and we've taken you off the waitlist for the ${esc(q)}.</p>`, acts);
   case 'notnow':
     update(e, { Status: 'Not Right Now', 'Response At': nowIso, Reason: note }, null, logRow(e, 'Not Right Now', { Reason: note }));
     return reply(200, 'You\'re still on the list', '<p>Thanks for letting us know. You\'re still on the waitlist and our team will be in touch.</p>', acts);

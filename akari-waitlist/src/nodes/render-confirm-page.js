@@ -25,15 +25,21 @@ try {
   if (n.isExecuted !== false) viewSettings = n.all().flatMap((i) => i.json.records || [])[0] || null;
 } catch (err) { viewSettings = null; }
 const calUrl = tourBookingUrl(e, viewSettings);
+// They book straight into Cal.com: this queue's own page, or a choice of locations (e.g. All-Access).
+const selfBook = !!calUrl || tourChoices(e).length > 0;
 const COPY = {
   yes: { title: 'Claim your spot', lead: `Confirm you'd like the <strong>${esc(q)}</strong>. We'll take you straight to signup and payment.`, button: 'Yes — continue to signup' },
-  tour: calUrl
+  tour: selfBook
     ? { title: 'Book a tour first', lead: `We'd love to show you around. Confirm below and we'll hold your <strong>${esc(q)}</strong> spot, then take you to pick a tour time.`, button: 'Choose a tour time' }
     : { title: 'Book a tour first', lead: `We'd love to show you around. Confirm below and we'll hold your <strong>${esc(q)}</strong> spot while we arrange a time.`, button: 'Request a tour', field: ['When suits you? (optional)', 'e.g. weekday evenings, Saturday morning'] },
   notnow: { title: 'Not right now', lead: `No problem — you'll stay on the waitlist for the <strong>${esc(q)}</strong>, and our team will be in touch.`, button: 'Keep me on the list', field: ['Anything we should know? (optional)', ''] },
   no: { title: 'Leave the waitlist', lead: `This removes you from the waitlist for the <strong>${esc(q)}</strong>.`, button: 'Remove me from the waitlist', field: ['Mind telling us why? (optional)', ''] },
   still: { title: 'Still interested?', lead: `Confirm you'd still like the <strong>${esc(q)}</strong>. You keep your place in line, and we'll email you as soon as a spot opens.`, button: 'Yes, I\'m still interested' },
   remove: { title: 'Leave the waitlist', lead: `This removes you from the waitlist for the <strong>${esc(q)}</strong>, and from any other list named in the same email.`, button: 'Remove me from the waitlist', field: ['Mind telling us why? (optional)', ''] },
+  // Existing members' invite (they upgrade through the membership team, not the sign-up link).
+  upgradenow: { title: 'Upgrade today', lead: `Confirm you'd like to upgrade to the <strong>${esc(q)}</strong> today. Our membership team will make the change and prorate the difference.`, button: 'Upgrade today' },
+  upgradenext: { title: 'Upgrade on your next billing cycle', lead: `Confirm you'd like to upgrade to the <strong>${esc(q)}</strong> from your next billing cycle. Our membership team will set it up.`, button: 'Upgrade on my next billing cycle' },
+  keep: { title: 'Keep your current membership', lead: `This keeps your current membership and takes you off the waitlist for the <strong>${esc(q)}</strong>.`, button: 'Keep my current membership' },
   leave: { title: 'Leave your other waitlists', lead: 'This removes you from every other Akari waitlist you are on. Your new membership is not affected.', button: 'Remove me from the other waitlists' },
 };
 const headsUp = ['still', 'remove'].includes(action);
@@ -41,14 +47,15 @@ const c = (e.status === 'Primed') === headsUp ? COPY[action] : null; // heads-up
 if (!c && headsUp) return reply(200, 'Nothing to change', '<p>Thanks — there\'s nothing to update on your waitlist entry. If you have a question, just reply to any of our emails.</p>');
 if (!c) return reply(400, 'Something went wrong', '<p>We couldn\'t read that link. Please use the buttons in your email.</p>');
 
+const claims = ['yes', 'tour', 'upgradenow', 'upgradenext'].includes(action);
 let note = '';
 const lapsed = (e.status === 'Invited' && e.expiresAt && NOW > e.expiresAt) || ['Warm', 'No Reply'].includes(e.status);
 if (e.status === 'Signed Up' && action !== 'leave') note = 'You have already claimed this spot.';
 else if (e.status === 'Removed') note = 'You are no longer on this waitlist.';
 else if (e.status === 'Tour Requested' && action === 'tour') note = 'You\'ve already asked for a tour, and your spot is held.';
-else if (['Not Right Now', 'No Longer Interested'].includes(e.status) && (action === 'yes' || action === 'tour')) note = 'You\'ve already told us you weren\'t ready, so this spot was released. If you continue, you\'ll be first in line for the next one.';
-else if (lapsed && (action === 'yes' || action === 'tour')) note = `Your ${CFG.holdHours}-hour hold has passed. If you continue, you'll be first in line for the next spot.`;
-else if (e.status === 'Invited' && e.expiresAt && (action === 'yes' || action === 'tour')) note = `Your spot is held until ${esc(fmtTime(e.expiresAt))}.`;
+else if (['Not Right Now', 'No Longer Interested'].includes(e.status) && claims) note = 'You\'ve already told us you weren\'t ready, so this spot was released. If you continue, you\'ll be first in line for the next one.';
+else if (lapsed && claims) note = `Your ${CFG.holdHours}-hour hold has passed. If you continue, you'll be first in line for the next spot.`;
+else if (e.status === 'Invited' && e.expiresAt && claims) note = `Your spot is held until ${esc(fmtTime(e.expiresAt))}.`;
 
 const field = c.field
   ? `<label for="reason">${esc(c.field[0])}</label><textarea id="reason" name="reason" maxlength="1000" placeholder="${esc(c.field[1])}"></textarea>`
