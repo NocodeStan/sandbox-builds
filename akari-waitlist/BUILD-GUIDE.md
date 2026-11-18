@@ -400,13 +400,13 @@ NODE24=/path/to/node24 N8N_BIN=/path/to/node_modules/n8n/bin/n8n npm run uat
 Date-time fields: time zone America/New_York.
 
 ## 9. Runbook for the Akari team
-- **After each recount in Glofox**, update `Active Members`. This also clears "pending signups" from the maths.
+- **Active Members** is set every morning at 5:30 by the Glofox sync; don't type over it (the next sync replaces it). To change how a queue is counted, edit its **Glofox Memberships** names.
 - **New location or membership**: add it in Typeform following the three naming rules (§4.6). Its Capacity row appears, switched off, after the first person picks it; fill in Minimum, Active, Signup URL (and Price / Tour Booking URL), then tick Enabled.
 - **Tour Requested**: the candidate books through Cal.com and the time appears in **Tour At**. After the tour, press **Send Sign-up Link** if they want to join. If nothing is sent, the hold is released 48h after the tour and they move to Not Right Now (the daily summary lists them).
 - **Who's next?** Open the **Line** view: each queue is sorted by Priority Score, highest first.
 - **Not Right Now**: follow up by hand; press Send Now when they're ready. After 60 days they're listed in the daily summary under *due a check-in*.
 - **No Reply** (missed their 48h window): out of the line. To put someone back, set Status to **Warm** (invited first on the next hourly run) or **Waiting** (back to their original place). If they press Sign up on the old email, they return as Warm by themselves.
-- **"Check Minimum Members: … is paused" email**: the queue's numbers give more open spots than `pauseIfOpenSpotsOver` (15). Fix `Minimum Members` / `Active Members` on that Capacity row and the next hourly run carries on. If the number is right (a new location), raise `pauseIfOpenSpotsOver` in Config.
+- **"Check Minimum Members: … is paused" email**: the queue's numbers give more open spots than `pauseIfOpenSpotsOver` (80 in the live Config). Fix `Minimum Members` / `Active Members` on that Capacity row and the next hourly run carries on. If the number is right (a new location), raise `pauseIfOpenSpotsOver` in Config.
 - **Who is ready?** In the Line view, `Interest Confirmed At` shows who pressed "I'm still interested" in their heads-up.
 - **Reorder**: type a number in `Manual Rank` (1 = next). Clear it to go back to the rules.
 - **Pause everything**: set `engineEnabled: false` in Config. Links and Send Now keep working.
